@@ -220,39 +220,35 @@ export default function InventoryPage() {
         </div>
       </section>
 
-      <section className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-8">
-        <div className="border-b border-slate-100 pb-2">
-          <h2 className="text-lg font-bold text-slate-900">Inventory Holdings</h2>
-          <p className="text-xs text-slate-400">Grouped by brand — filtered dynamically</p>
-        </div>
-
         {BRANDS.map((brand) => {
           const { filled, empty } = groupedByBrand[brand];
           if (!filled.length && !empty.length) return null;
 
           return (
-            <div key={brand} className="space-y-4">
-              <h3 className="text-base font-black text-slate-800 border-l-4 border-red-600 pl-3">{brand}</h3>
-              {filled.length > 0 && (
-                <div className="space-y-2">
-                  <h4 className="text-xs font-bold uppercase text-indigo-600 tracking-wider">Filled Cylinders</h4>
-                  <InventoryTable products={filled} onEdit={setEditProduct} onDelete={setDeleteTarget} />
-                </div>
+            <section className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-8">
+              <div key={brand} className="space-y-4">
+                <h3 className="text-base font-black text-slate-800 border-l-4 border-red-600 pl-3">{brand} Inventory Holdings</h3>
+                {filled.length > 0 && (
+                  <div className="space-y-2">
+                    <h4 className="text-xs font-bold uppercase text-indigo-600 tracking-wider">Filled Cylinders</h4>
+                    <InventoryTable products={filled} onEdit={setEditProduct} onDelete={setDeleteTarget} />
+                  </div>
+                )}
+                {empty.length > 0 && (
+                  <div className="space-y-2">
+                    <h4 className="text-xs font-bold uppercase text-slate-500 tracking-wider">Empty Cylinders</h4>
+                    <InventoryTable products={empty} onEdit={setEditProduct} onDelete={setDeleteTarget} />
+                  </div>
+                )}
+                <hr />
+              </div>
+                {products.length === 0 && (
+                <p className="text-center text-slate-400 py-8">No inventory matches the selected filters.</p>
               )}
-              {empty.length > 0 && (
-                <div className="space-y-2">
-                  <h4 className="text-xs font-bold uppercase text-slate-500 tracking-wider">Empty Cylinders</h4>
-                  <InventoryTable products={empty} onEdit={setEditProduct} onDelete={setDeleteTarget} />
-                </div>
-              )}
-            </div>
+            </section>
           );
         })}
-
-        {products.length === 0 && (
-          <p className="text-center text-slate-400 py-8">No inventory matches the selected filters.</p>
-        )}
-      </section>
+        
 
       {addModalOpen && (
         <Modal title="Add New Product" onClose={() => setAddModalOpen(false)} size="lg" footer={
