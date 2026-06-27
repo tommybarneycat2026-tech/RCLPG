@@ -36,8 +36,8 @@ function InventoryTable({ products, onEdit, onDelete }) {
             <th className="p-3">Weight</th>
             <th className="p-3 text-center">Stock</th>
             <th className="p-3 text-center">Health Status</th>
-            <th className="p-3 text-right">Retail Price</th>
-            <th className="p-3 text-right">Wholesale Price</th>
+            <th className="p-3 text-center">Retail Price</th>
+            <th className="p-3 text-center">Wholesale Price</th>
             <th className="p-3 text-center">Actions</th>
           </tr>
         </thead>
@@ -51,8 +51,8 @@ function InventoryTable({ products, onEdit, onDelete }) {
                   {p.health_indicator}
                 </span>
               </td>
-              <td className="p-3 text-right">{formatCurrency(p.regular_retail)}</td>
-              <td className="p-3 text-right text-red-600">{formatCurrency(p.wholesale_price)}</td>
+              <td className="p-3 text-center">{formatCurrency(p.regular_retail)}</td>
+              <td className="p-3 text-center text-red-600">{formatCurrency(p.wholesale_price)}</td>
               <td className="p-3 text-center space-x-1">
                 <button type="button" onClick={() => onEdit(p)} className="text-xs font-bold bg-amber-100 hover:bg-amber-500 hover:text-white px-2.5 py-1 rounded-lg">Edit</button>
                 <button type="button" onClick={() => onDelete(p)} className="text-xs font-bold bg-red-50 text-red-600 hover:bg-red-600 hover:text-white px-2.5 py-1 rounded-lg">Delete</button>
@@ -61,6 +61,7 @@ function InventoryTable({ products, onEdit, onDelete }) {
           ))}
         </tbody>
       </table>
+      <hr />
     </div>
   );
 }
