@@ -4,11 +4,12 @@ export const PRODUCT_STATUSES = ['Filled Tank', 'Empty Cylinder'];
 export const HEALTH_INDICATORS = ['Good Stock', 'Low Stock', 'Out of Stock'];
 export const SALE_STATUSES = ['Dropped', 'Active', 'Finished', 'Archived'];
 export const PRICE_TYPES = ['Regular Retail', 'Wholesale'];
-export const LOW_STOCK_THRESHOLD = 3;
+export const LOW_STOCK_THRESHOLD = 4;
+export const PAYMENT_METHODS = ['Fully Paid', 'Credit'];
 
 export function computeHealthIndicator(stockQuantity) {
   if (stockQuantity <= 0) return 'Out of Stock';
-  if (stockQuantity <= LOW_STOCK_THRESHOLD) return 'Low Stock';
+  if (stockQuantity < 5) return 'Low Stock';
   return 'Good Stock';
 }
 

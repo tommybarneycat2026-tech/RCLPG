@@ -11,6 +11,6 @@ router.use(authenticate);
 router.get('/', ...salesController.listSales, validate);
 router.post('/', ...salesController.createSale, validate);
 router.put('/:saleId', ...salesController.updateSale, validate);
-router.patch('/:saleId/drop', ...salesController.dropSale, validate);
+router.delete('/:saleId', ...salesController.deleteSale, validate);
 
 export default router;

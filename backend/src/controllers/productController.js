@@ -5,11 +5,15 @@ import { asyncHandler } from '../middleware/errorHandler.js';
 
 export const listProducts = [
   q('search').optional().isString(),
-  q('archived').optional().isIn(['true', 'false']),
+  q('brand').optional({ values: 'falsy' }).isIn(BRANDS),
+  q('condition').optional({ values: 'falsy' }).isIn(['filled', 'empty']),
+  q('stockTier').optional({ values: 'falsy' }).isIn(['out', 'low', 'good']),
   asyncHandler(async (req, res) => {
     const products = await productService.listProducts({
       search: req.query.search || '',
-      archived: req.query.archived === 'true',
+      brand: req.query.brand || '',
+      condition: req.query.condition || '',
+      stockTier: req.query.stockTier || '',
     });
     res.json({ success: true, data: products });
   }),
@@ -56,10 +60,10 @@ export const updateProduct = [
   }),
 ];
 
-export const archiveProduct = [
+export const deleteProduct = [
   param('productId').notEmpty(),
   asyncHandler(async (req, res) => {
-    const product = await productService.archiveProduct(req.params.productId);
+    const product = await productService.deleteProduct(req.params.productId);
     res.json({ success: true, data: product });
   }),
 ];

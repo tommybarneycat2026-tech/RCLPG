@@ -7,6 +7,7 @@ import LoginPage from './pages/LoginPage';
 import DashboardPage from './pages/DashboardPage';
 import InventoryPage from './pages/InventoryPage';
 import SalesLogPage from './pages/SalesLogPage';
+import CreditLogsPage from './pages/CreditLogsPage';
 import AdminProfilePage from './pages/AdminProfilePage';
 import RCLPGLogo from '../RCLPG_Logo.jpg';
 
@@ -21,6 +22,7 @@ export default function App() {
               <Route path="/dashboard" element={<DashboardPage />} />
               <Route path="/inventory" element={<InventoryPage />} />
               <Route path="/sales-log" element={<SalesLogPage />} />
+              <Route path="/credit-logs" element={<CreditLogsPage />} />
               <Route element={<AdminRoute />}>
                 <Route path="/admin/profile" element={<AdminProfilePage />} />
               </Route>

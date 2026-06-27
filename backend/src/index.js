@@ -10,6 +10,7 @@ import customerRoutes from './routes/customers.routes.js';
 import salesRoutes from './routes/sales.routes.js';
 import dashboardRoutes from './routes/dashboard.routes.js';
 import usersRoutes from './routes/users.routes.js';
+import creditRoutes from './routes/credit.routes.js';
 
 const app = express();
 
@@ -34,6 +35,7 @@ app.use('/api/customers', customerRoutes);
 app.use('/api/sales', salesRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/users', usersRoutes);
+app.use('/api/credits', creditRoutes);
 
 app.use(notFound);
 app.use(errorHandler);

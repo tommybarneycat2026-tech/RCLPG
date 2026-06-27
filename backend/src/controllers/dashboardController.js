@@ -5,10 +5,11 @@ import * as reportService from '../services/reportService.js';
 import { asyncHandler } from '../middleware/errorHandler.js';
 
 export const getMetrics = asyncHandler(async (_req, res) => {
-  const [salesMetrics, inventoryMetrics, lowStock] = await Promise.all([
+  const [salesMetrics, inventoryMetrics, lowStock, brandMetrics] = await Promise.all([
     salesService.getDashboardSalesMetrics(),
     productService.getInventoryMetrics(),
     productService.getLowStockProducts(),
+    salesService.getBrandSalesMetrics(),
   ]);
 
   res.json({
@@ -20,6 +21,7 @@ export const getMetrics = asyncHandler(async (_req, res) => {
       totalEmptyStock: inventoryMetrics.total_empty,
       lowStockCount: lowStock.length,
       lowStockProducts: lowStock,
+      brandSalesMetrics: brandMetrics,
     },
   });
 });

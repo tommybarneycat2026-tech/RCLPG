@@ -3,6 +3,8 @@ import { api, formatCurrency } from '../api/client';
 import { useToast } from '../context/ToastContext';
 import LoadingSpinner from '../components/LoadingSpinner';
 import SaleForm from '../components/SaleForm';
+import RecordSaleModal from '../components/RecordSaleModal';
+import Modal from '../components/Modal';
 
 export default function SalesLogPage() {
   const { showToast } = useToast();
@@ -10,9 +12,13 @@ export default function SalesLogPage() {
   const [products, setProducts] = useState([]);
   const [customers, setCustomers] = useState([]);
   const [search, setSearch] = useState('');
-  const [showArchived, setShowArchived] = useState(false);
+  const [dateFilter, setDateFilter] = useState('');
+  const [customerNameFilter, setCustomerNameFilter] = useState('');
+  const [productFilter, setProductFilter] = useState('');
   const [loading, setLoading] = useState(true);
   const [selectedSaleId, setSelectedSaleId] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [saleModalOpen, setSaleModalOpen] = useState(false);
   const [saving, setSaving] = useState(false);
 
   const selectedSale = sales.find((s) => s.sale_id === selectedSaleId);
@@ -20,9 +26,15 @@ export default function SalesLogPage() {
   const loadData = useCallback(async () => {
     try {
       setLoading(true);
+      const params = { limit: '100' };
+      if (search) params.search = search;
+      if (dateFilter) params.dateFilter = dateFilter;
+      if (customerNameFilter) params.customerName = customerNameFilter;
+      if (productFilter) params.productFilter = productFilter;
+
       const [salesRes, productsRes, customersRes] = await Promise.all([
-        api.getSales({ search, archived: String(showArchived), limit: '100' }),
-        api.getProducts({ archived: 'false' }),
+        api.getSales(params),
+        api.getProducts(),
         api.getCustomers(),
       ]);
       setSales(salesRes.data);
@@ -33,7 +45,7 @@ export default function SalesLogPage() {
     } finally {
       setLoading(false);
     }
-  }, [search, showArchived, showToast]);
+  }, [search, dateFilter, customerNameFilter, productFilter, showToast]);
 
   useEffect(() => {
     loadData();
@@ -56,15 +68,19 @@ export default function SalesLogPage() {
     }
   };
 
-  const handleDrop = async (saleId) => {
-    if (!window.confirm('Archive this transaction? Stock will be restored.')) return;
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
     try {
-      await api.dropSale(saleId);
-      showToast('Transaction Dropped', 'Sale archived and stock restored.');
-      if (selectedSaleId === saleId) setSelectedSaleId(null);
+      setSaving(true);
+      await api.deleteSale(deleteTarget.sale_id);
+      showToast('Transaction Deleted', 'Sale removed and stock restored.');
+      if (selectedSaleId === deleteTarget.sale_id) setSelectedSaleId(null);
+      setDeleteTarget(null);
       await loadData();
     } catch (err) {
-      showToast('Drop Failed', err.message, 'error');
+      showToast('Delete Failed', err.message, 'error');
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -72,17 +88,36 @@ export default function SalesLogPage() {
 
   return (
     <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-100 pb-4">
-        <div>
-          <h2 className="text-lg font-bold text-slate-900">Customer & Sales Log</h2>
-          <div className="flex gap-2 mt-2">
-            <button type="button" onClick={() => setShowArchived(false)} className={`text-xs font-bold px-3 py-1 rounded-lg ${!showArchived ? 'bg-red-50 text-red-600' : 'bg-slate-100 text-slate-600'}`}>Active</button>
-            <button type="button" onClick={() => setShowArchived(true)} className={`text-xs font-bold px-3 py-1 rounded-lg ${showArchived ? 'bg-red-50 text-red-600' : 'bg-slate-100 text-slate-600'}`}>Archived</button>
+      <div className="border-b border-slate-100 pb-4 space-y-4">
+        <h2 className="text-lg font-bold text-slate-900">Customer & Sales Log</h2>
+
+        <div className="flex flex-col lg:flex-row lg:items-end gap-3">
+          <button
+            type="button"
+            onClick={() => setSaleModalOpen(true)}
+            className="bg-red-600 hover:bg-red-700 text-white font-bold text-xs px-5 py-2.5 rounded-xl shrink-0"
+          >
+            Record Sale
+          </button>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 flex-1">
+            <div>
+              <label htmlFor="date-filter" className="block text-[11px] font-bold uppercase text-slate-500 mb-1">Date Filter</label>
+              <input id="date-filter" type="date" value={dateFilter} onChange={(e) => setDateFilter(e.target.value)} className="w-full text-xs p-2.5 border border-slate-200 rounded-xl" />
+            </div>
+            <div>
+              <label htmlFor="customer-filter" className="block text-[11px] font-bold uppercase text-slate-500 mb-1">Customer Name</label>
+              <input id="customer-filter" type="text" value={customerNameFilter} onChange={(e) => setCustomerNameFilter(e.target.value)} placeholder="Filter by name..." className="w-full text-xs p-2.5 border border-slate-200 rounded-xl" />
+            </div>
+            <div>
+              <label htmlFor="product-filter" className="block text-[11px] font-bold uppercase text-slate-500 mb-1">Product Filter</label>
+              <input id="product-filter" type="text" value={productFilter} onChange={(e) => setProductFilter(e.target.value)} placeholder="Brand, weight, status..." className="w-full text-xs p-2.5 border border-slate-200 rounded-xl" />
+            </div>
+            <div>
+              <label htmlFor="sales-search" className="block text-[11px] font-bold uppercase text-slate-500 mb-1">Search</label>
+              <input id="sales-search" type="search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search transactions..." className="w-full text-xs p-2.5 border border-slate-200 rounded-xl" />
+            </div>
           </div>
-        </div>
-        <div className="w-full sm:w-64">
-          <label htmlFor="sales-search" className="sr-only">Search sales log</label>
-          <input id="sales-search" type="search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search transactions..." className="w-full text-xs p-2.5 border border-slate-200 rounded-xl" />
         </div>
       </div>
 
@@ -97,6 +132,7 @@ export default function SalesLogPage() {
           </div>
           <SaleForm
             compact
+            showPaymentMethod={false}
             customers={customers}
             products={products}
             brands={brands}
@@ -146,12 +182,8 @@ export default function SalesLogPage() {
                 <td className="p-3 text-right">{formatCurrency(sale.unit_price)}</td>
                 <td className="p-3 text-right text-red-600 font-extrabold">{formatCurrency(sale.total_amount)}</td>
                 <td className="p-3 text-center space-x-1">
-                  {!showArchived && (
-                    <>
-                      <button type="button" onClick={() => setSelectedSaleId(sale.sale_id)} className="text-xs font-bold bg-slate-100 hover:bg-slate-800 hover:text-white px-2 py-1 rounded-lg">Override</button>
-                      <button type="button" onClick={() => handleDrop(sale.sale_id)} className="text-xs font-bold bg-red-50 text-red-600 hover:bg-red-600 hover:text-white px-2 py-1 rounded-lg">Drop</button>
-                    </>
-                  )}
+                  <button type="button" onClick={() => setSelectedSaleId(sale.sale_id)} className="text-xs font-bold bg-slate-100 hover:bg-slate-800 hover:text-white px-2 py-1 rounded-lg">Override</button>
+                  <button type="button" onClick={() => setDeleteTarget(sale)} className="text-xs font-bold bg-red-50 text-red-600 hover:bg-red-600 hover:text-white px-2 py-1 rounded-lg">Delete</button>
                 </td>
               </tr>
             ))}
@@ -161,6 +193,25 @@ export default function SalesLogPage() {
           </tbody>
         </table>
       </div>
+
+      {deleteTarget && (
+        <Modal title="Delete Sale" onClose={() => setDeleteTarget(null)} footer={
+          <>
+            <button type="button" onClick={() => setDeleteTarget(null)} className="px-4 py-2 rounded-xl bg-slate-100 text-sm font-bold">Cancel</button>
+            <button type="button" disabled={saving} onClick={confirmDelete} className="px-4 py-2 rounded-xl bg-red-600 text-white text-sm font-bold">Confirm Delete</button>
+          </>
+        }>
+          <p className="text-sm text-slate-600">
+            Permanently delete this sale for <strong>{deleteTarget.customer_name}</strong>? Stock will be restored and all payment records will be removed.
+          </p>
+        </Modal>
+      )}
+
+      <RecordSaleModal
+        open={saleModalOpen}
+        onClose={() => setSaleModalOpen(false)}
+        onSuccess={loadData}
+      />
     </div>
   );
 }

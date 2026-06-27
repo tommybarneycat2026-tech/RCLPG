@@ -9,20 +9,33 @@ function productOptionLabel(product) {
   return `${prefix}(${product.weight_class}kg [${statusShort}] - Stock: ${product.stock_quantity})`;
 }
 
-export default function SaleForm({ customers, products, brands, onSubmit, initialValues, submitLabel = 'Save Sale', title = 'Record New Sale', description = 'Inventory base price loads automatically but can be edited manually', compact = false }) {
+export default function SaleForm({
+  customers,
+  products,
+  brands,
+  onSubmit,
+  initialValues,
+  submitLabel = 'Save Sale',
+  title = 'Record New Sale',
+  description = 'Inventory base price loads automatically but can be edited manually',
+  compact = false,
+  showPaymentMethod = true,
+}) {
   const [mode, setMode] = useState(initialValues?.customerId ? 'existing' : 'existing');
   const [customerId, setCustomerId] = useState(initialValues?.customerId || '');
   const [customerName, setCustomerName] = useState(initialValues?.customerName || '');
   const [fbName, setFbName] = useState(initialValues?.fbName || '');
   const [phoneNumber, setPhoneNumber] = useState(initialValues?.phoneNumber || '');
   const [priceType, setPriceType] = useState(initialValues?.priceType || 'Regular Retail');
+  const [paymentMethod, setPaymentMethod] = useState(initialValues?.paymentMethod || 'Fully Paid');
+  const [initialPayment, setInitialPayment] = useState(initialValues?.initialPayment ?? '');
   const [brand, setBrand] = useState(initialValues?.brand || brands[0] || '');
   const [productId, setProductId] = useState(initialValues?.productId || '');
   const [quantity, setQuantity] = useState(initialValues?.quantity || 1);
   const [unitPrice, setUnitPrice] = useState(initialValues?.unitPrice || 0);
 
   const filteredProducts = useMemo(
-    () => products.filter((p) => p.brand === brand && !p.is_archived),
+    () => products.filter((p) => p.brand === brand),
     [products, brand]
   );
 
@@ -65,6 +78,8 @@ export default function SaleForm({ customers, products, brands, onSubmit, initia
       fbName,
       phoneNumber,
       priceType,
+      paymentMethod: showPaymentMethod ? paymentMethod : 'Fully Paid',
+      initialPayment: paymentMethod === 'Credit' ? Number(initialPayment) || 0 : undefined,
       productId,
       quantity: Number(quantity),
       unitPrice: Number(unitPrice),
@@ -72,7 +87,7 @@ export default function SaleForm({ customers, products, brands, onSubmit, initia
   };
 
   return (
-    <div className={`bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4 ${compact ? 'border-0 shadow-none p-0' : ''}`}>
+    <div className={`bg-white rounded-xl space-y-4 ${compact ? '' : 'p-6 border border-slate-200 shadow-sm'}`}>
       {!compact && (
         <div className="border-b border-slate-100 pb-3">
           <h2 className="text-lg font-bold text-slate-900">{title}</h2>
@@ -138,6 +153,41 @@ export default function SaleForm({ customers, products, brands, onSubmit, initia
             <option value="Wholesale">Wholesale</option>
           </select>
         </div>
+
+        {showPaymentMethod && (
+          <div className="space-y-3">
+            <div>
+              <label htmlFor="payment-method" className="block text-xs font-bold uppercase text-slate-500 mb-1">Payment Method</label>
+              <select
+                id="payment-method"
+                value={paymentMethod}
+                onChange={(e) => setPaymentMethod(e.target.value)}
+                className="w-full text-sm py-3 px-4 border border-slate-200 bg-white rounded-xl"
+              >
+                <option value="Fully Paid">Fully Paid</option>
+                <option value="Credit">Credit</option>
+              </select>
+            </div>
+            {paymentMethod === 'Credit' && (
+              <div>
+                <label htmlFor="initial-payment" className="block text-xs font-bold uppercase text-slate-500 mb-1">
+                  Initial Payment <span className="font-normal normal-case text-slate-400">(optional)</span>
+                </label>
+                <input
+                  id="initial-payment"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  max={total}
+                  value={initialPayment}
+                  onChange={(e) => setInitialPayment(e.target.value)}
+                  placeholder="0.00"
+                  className="w-full text-sm p-3 border border-slate-200 rounded-xl"
+                />
+              </div>
+            )}
+          </div>
+        )}
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>

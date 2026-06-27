@@ -11,7 +11,7 @@ router.use(authenticate);
 router.get('/', ...productController.listProducts, validate);
 router.post('/', ...productController.createProduct, validate);
 router.put('/:productId', ...productController.updateProduct, validate);
-router.patch('/:productId/archive', ...productController.archiveProduct, validate);
+router.delete('/:productId', ...productController.deleteProduct, validate);
 
 // Static endpoints
 router.get('/summary/weekly', productController.weeklySummary);

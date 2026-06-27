@@ -58,6 +58,9 @@ export default function Layout({ children }) {
               <NavLink to="/sales-log" className={navClass}>
                 Customer & Sales Log
               </NavLink>
+              <NavLink to="/credit-logs" className={navClass}>
+                Credit Logs
+              </NavLink>
               {isAdministrator && (
                 <NavLink to="/admin/profile" className={navClass}>
                   Admin Profile
@@ -123,6 +126,9 @@ export default function Layout({ children }) {
             </Link>
             <Link to="/sales-log" className="block px-3 py-2 rounded-xl text-sm text-slate-600" onClick={() => setMobileOpen(false)}>
               Customer & Sales Log
+            </Link>
+            <Link to="/credit-logs" className="block px-3 py-2 rounded-xl text-sm text-slate-600" onClick={() => setMobileOpen(false)}>
+              Credit Logs
             </Link>
             {isAdministrator && (
               <Link to="/admin/profile" className="block px-3 py-2 rounded-xl text-sm text-slate-600" onClick={() => setMobileOpen(false)}>

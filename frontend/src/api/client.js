@@ -91,7 +91,7 @@ export const api = {
   createProduct: (body) => request('/products', { method: 'POST', body: JSON.stringify(body) }),
   updateProduct: (productId, body) =>
     request(`/products/${productId}`, { method: 'PUT', body: JSON.stringify(body) }),
-  archiveProduct: (productId) => request(`/products/${productId}/archive`, { method: 'PATCH' }),
+  deleteProduct: (productId) => request(`/products/${productId}`, { method: 'DELETE' }),
   getWeeklySummary: () => request('/products/summary/weekly'),
   getCustomers: (search = '') => request(`/customers?search=${encodeURIComponent(search)}`),
   getSales: (params = {}) => {
@@ -101,7 +101,12 @@ export const api = {
   createSale: (body) => request('/sales', { method: 'POST', body: JSON.stringify(body) }),
   updateSale: (saleId, body) =>
     request(`/sales/${saleId}`, { method: 'PUT', body: JSON.stringify(body) }),
-  dropSale: (saleId) => request(`/sales/${saleId}/drop`, { method: 'PATCH' }),
+  deleteSale: (saleId) => request(`/sales/${saleId}`, { method: 'DELETE' }),
+  getCredits: () => request('/credits'),
+  getCreditSummary: (saleId) => request(`/credits/${saleId}/summary`),
+  getCreditHistory: (saleId) => request(`/credits/${saleId}/history`),
+  createCreditPayment: (saleId, amount) =>
+    request(`/credits/${saleId}/payments`, { method: 'POST', body: JSON.stringify({ amount }) }),
   exportReport: async (params) => {
     const qs = new URLSearchParams(params).toString();
     const response = await request(`/dashboard/export?${qs}`);

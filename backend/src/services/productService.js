@@ -11,18 +11,44 @@ async function generateProductId() {
   return String(nextNum).padStart(6, '0');
 }
 
-export async function listProducts({ search = '', archived = false } = {}) {
+function buildStockTierClause(stockTier) {
+  if (stockTier === 'out') return `AND stock_quantity <= 0`;
+  if (stockTier === 'low') return `AND stock_quantity > 0 AND stock_quantity < 5`;
+  if (stockTier === 'good') return `AND stock_quantity > 5`;
+  return '';
+}
+
+export async function listProducts({
+  search = '',
+  brand = '',
+  condition = '',
+  stockTier = '',
+} = {}) {
+  const brandClause = brand ? `AND brand = $3` : '';
+  const conditionClause =
+    condition === 'filled'
+      ? `AND status = 'Filled Tank'`
+      : condition === 'empty'
+        ? `AND status = 'Empty Cylinder'`
+        : '';
+  const stockClause = buildStockTierClause(stockTier);
+
+  const params = [search, `%${search}%`];
+  if (brand) params.push(brand);
+
   const result = await query(
     `SELECT product_id, brand, weight_class, status, stock_quantity,
             health_indicator, regular_retail, wholesale_price,
-            is_archived, created_at, updated_at
+            created_at, updated_at
      FROM lpg_products
-     WHERE is_archived = $1
-       AND ($2 = '' OR brand ILIKE $3 OR CAST(weight_class AS text) ILIKE $3 OR status ILIKE $3)
-     ORDER BY weight_class ASC,
-       CASE WHEN status = 'Filled Tank' THEN 0 ELSE 1 END,
-       brand ASC`,
-    [archived, search, `%${search}%`]
+     WHERE ($1 = '' OR brand ILIKE $2 OR CAST(weight_class AS text) ILIKE $2 OR status ILIKE $2)
+       ${brandClause}
+       ${conditionClause}
+       ${stockClause}
+     ORDER BY brand ASC,
+       weight_class ASC,
+       CASE WHEN status = 'Filled Tank' THEN 0 ELSE 1 END`,
+    params
   );
   return result.rows;
 }
@@ -43,8 +69,8 @@ export async function createProduct(data) {
   const result = await query(
     `INSERT INTO lpg_products
       (product_id, brand, weight_class, status, stock_quantity, health_indicator,
-       regular_retail, wholesale_price, is_archived, updated_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, false, NOW())
+       regular_retail, wholesale_price, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
      RETURNING *`,
     [
       productId,
@@ -93,14 +119,20 @@ export async function updateProduct(productId, data) {
   return result.rows[0];
 }
 
-export async function archiveProduct(productId) {
-  const result = await query(
-    `UPDATE lpg_products SET is_archived = true, updated_at = NOW()
-     WHERE product_id = $1 AND is_archived = false
-     RETURNING *`,
+export async function deleteProduct(productId) {
+  const salesCheck = await query(
+    `SELECT COUNT(*)::int AS count FROM sales_records WHERE product_id = $1`,
     [productId]
   );
-  if (!result.rows[0]) throw new AppError('Product not found or already archived', 404);
+  if (salesCheck.rows[0].count > 0) {
+    throw new AppError('Cannot delete product with existing sales records', 400);
+  }
+
+  const result = await query(
+    `DELETE FROM lpg_products WHERE product_id = $1 RETURNING *`,
+    [productId]
+  );
+  if (!result.rows[0]) throw new AppError('Product not found', 404);
   return result.rows[0];
 }
 
@@ -108,7 +140,6 @@ export async function adjustStock(productId, delta, client) {
   const runner = client ? client.query.bind(client) : query;
   const product = await getProductById(productId, client);
   if (!product) throw new AppError('Product not found', 404);
-  if (product.is_archived) throw new AppError('Cannot adjust archived product stock', 400);
 
   const newStock = Math.max(0, product.stock_quantity + delta);
   const health = computeHealthIndicator(newStock);
@@ -129,7 +160,6 @@ export async function getWeeklyStockSummary() {
             SUM(CASE WHEN status = 'Filled Tank' THEN stock_quantity ELSE 0 END)::int AS filled_stock,
             SUM(CASE WHEN status = 'Empty Cylinder' THEN stock_quantity ELSE 0 END)::int AS empty_stock
      FROM lpg_products
-     WHERE is_archived = false
      GROUP BY weight_class
      ORDER BY weight_class ASC`
   );
@@ -145,8 +175,7 @@ export async function getLowStockProducts() {
   const result = await query(
     `SELECT product_id, brand, weight_class, status, stock_quantity, health_indicator
      FROM lpg_products
-     WHERE is_archived = false
-       AND health_indicator IN ('Low Stock', 'Out of Stock')
+     WHERE health_indicator IN ('Low Stock', 'Out of Stock')
      ORDER BY
        CASE health_indicator WHEN 'Out of Stock' THEN 0 ELSE 1 END,
        weight_class ASC,
@@ -160,8 +189,7 @@ export async function getInventoryMetrics() {
     `SELECT
        COALESCE(SUM(CASE WHEN status = 'Filled Tank' THEN stock_quantity ELSE 0 END), 0)::int AS total_filled,
        COALESCE(SUM(CASE WHEN status = 'Empty Cylinder' THEN stock_quantity ELSE 0 END), 0)::int AS total_empty
-     FROM lpg_products
-     WHERE is_archived = false`
+     FROM lpg_products`
   );
   return result.rows[0];
 }

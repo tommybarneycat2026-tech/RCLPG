@@ -2,6 +2,7 @@ import pool, { query } from '../config/db.js';
 import { AppError } from '../middleware/errorHandler.js';
 import * as productService from './productService.js';
 import * as customerService from './customerService.js';
+import * as creditService from './creditService.js';
 
 function buildDateFilter(period, startDate, endDate) {
   const clauses = [];
@@ -29,16 +30,18 @@ function buildDateFilter(period, startDate, endDate) {
 
 export async function listSales({
   search = '',
-  archived = false,
   page = 1,
   limit = 10,
   todayOnly = false,
   period,
   startDate,
   endDate,
+  customerName = '',
+  productFilter = '',
+  dateFilter = '',
 } = {}) {
   const offset = (page - 1) * limit;
-  const statusFilter = archived ? "('Archived', 'Dropped')" : "('Active', 'Finished')";
+  const statusFilter = "('Active', 'Finished')";
 
   let dateClause = '';
   const params = [search, `%${search}%`];
@@ -51,17 +54,38 @@ export async function listSales({
     dateClause = filter.where;
     params.push(...filter.params);
     idx = filter.nextIdx;
+  } else if (dateFilter) {
+    dateClause = `AND DATE(sr.date_created) = $${idx++}`;
+    params.push(dateFilter);
   }
+
+  let customerClause = '';
+  if (customerName) {
+    customerClause = `AND c.name ILIKE $${idx++}`;
+    params.push(`%${customerName}%`);
+  }
+
+  let productClause = '';
+  if (productFilter) {
+    productClause = `AND (p.brand ILIKE $${idx} OR CAST(p.weight_class AS text) ILIKE $${idx} OR p.status ILIKE $${idx})`;
+    params.push(`%${productFilter}%`);
+    idx += 1;
+  }
+
+  const baseWhere = `
+     WHERE sr.status IN ${statusFilter}
+       AND ($1 = '' OR c.name ILIKE $2 OR c.fb_name ILIKE $2 OR c.phone_number ILIKE $2
+            OR p.brand ILIKE $2 OR CAST(p.weight_class AS text) ILIKE $2 OR p.status ILIKE $2)
+       ${dateClause}
+       ${customerClause}
+       ${productClause}`;
 
   const countResult = await query(
     `SELECT COUNT(*)::int AS total
      FROM sales_records sr
      JOIN customers c ON c.customer_id = sr.customer_id
      JOIN lpg_products p ON p.product_id = sr.product_id
-     WHERE sr.status IN ${statusFilter}
-       AND ($1 = '' OR c.name ILIKE $2 OR c.fb_name ILIKE $2 OR c.phone_number ILIKE $2
-            OR p.brand ILIKE $2 OR CAST(p.weight_class AS text) ILIKE $2)
-       ${dateClause}`,
+     ${baseWhere}`,
     params
   );
 
@@ -73,10 +97,7 @@ export async function listSales({
      FROM sales_records sr
      JOIN customers c ON c.customer_id = sr.customer_id
      JOIN lpg_products p ON p.product_id = sr.product_id
-     WHERE sr.status IN ${statusFilter}
-       AND ($1 = '' OR c.name ILIKE $2 OR c.fb_name ILIKE $2 OR c.phone_number ILIKE $2
-            OR p.brand ILIKE $2 OR CAST(p.weight_class AS text) ILIKE $2)
-       ${dateClause}
+     ${baseWhere}
      ORDER BY sr.date_created DESC
      LIMIT $${idx} OFFSET $${idx + 1}`,
     [...params, limit, offset]
@@ -119,7 +140,7 @@ export async function createSale(payload) {
     });
 
     const product = await productService.getProductById(payload.productId, client);
-    if (!product || product.is_archived) {
+    if (!product) {
       throw new AppError('Selected product is unavailable', 400);
     }
 
@@ -131,6 +152,7 @@ export async function createSale(payload) {
     }
 
     const totalAmount = Number((payload.quantity * payload.unitPrice).toFixed(2));
+    const paymentMethod = payload.paymentMethod || 'Fully Paid';
 
     const saleResult = await client.query(
       `INSERT INTO sales_records
@@ -147,10 +169,22 @@ export async function createSale(payload) {
       ]
     );
 
+    const saleId = saleResult.rows[0].sale_id;
+
+    await creditService.createInitialCreditRecord(
+      {
+        saleId,
+        paymentMethod,
+        totalAmount,
+        initialPayment: payload.initialPayment,
+      },
+      client
+    );
+
     await productService.adjustStock(payload.productId, -payload.quantity, client);
 
     await client.query('COMMIT');
-    return getSaleById(saleResult.rows[0].sale_id);
+    return getSaleById(saleId);
   } catch (err) {
     await client.query('ROLLBACK');
     throw err;
@@ -167,7 +201,7 @@ export async function updateSale(saleId, payload) {
     const existing = await getSaleById(saleId);
     if (!existing) throw new AppError('Sale not found', 404);
     if (['Archived', 'Dropped'].includes(existing.status)) {
-      throw new AppError('Cannot modify archived or dropped sale', 400);
+      throw new AppError('Cannot modify deleted sale', 400);
     }
 
     await customerService.updateCustomer(existing.customer_id, {
@@ -183,7 +217,7 @@ export async function updateSale(saleId, payload) {
       await productService.adjustStock(existing.product_id, existing.sale_quantity, client);
 
       const newProduct = await productService.getProductById(payload.productId, client);
-      if (!newProduct || newProduct.is_archived) {
+      if (!newProduct) {
         throw new AppError('Selected product is unavailable', 400);
       }
       if (payload.quantity > newProduct.stock_quantity) {
@@ -226,26 +260,21 @@ export async function updateSale(saleId, payload) {
   }
 }
 
-export async function dropSale(saleId) {
+export async function deleteSale(saleId) {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
 
     const existing = await getSaleById(saleId);
     if (!existing) throw new AppError('Sale not found', 404);
-    if (['Archived', 'Dropped'].includes(existing.status)) {
-      throw new AppError('Sale already archived or dropped', 400);
-    }
 
     await productService.adjustStock(existing.product_id, existing.sale_quantity, client);
+    await creditService.deleteCreditHistoryForSale(saleId, client);
 
-    await client.query(
-      `UPDATE sales_records SET status = 'Dropped', date_updated = NOW() WHERE sale_id = $1`,
-      [saleId]
-    );
+    await client.query(`DELETE FROM sales_records WHERE sale_id = $1`, [saleId]);
 
     await client.query('COMMIT');
-    return getSaleById(saleId);
+    return { saleId, deleted: true };
   } catch (err) {
     await client.query('ROLLBACK');
     throw err;
@@ -263,6 +292,28 @@ export async function getDashboardSalesMetrics() {
      WHERE status IN ('Active', 'Finished')`
   );
   return result.rows[0];
+}
+
+export async function getBrandSalesMetrics() {
+  const result = await query(
+    `SELECT
+       p.brand,
+       COALESCE(SUM(sr.sale_quantity), 0)::int AS total_items_sold
+     FROM sales_records sr
+     JOIN lpg_products p ON p.product_id = sr.product_id
+     WHERE sr.status IN ('Active', 'Finished')
+     GROUP BY p.brand
+     ORDER BY total_items_sold DESC`
+  );
+
+  const rows = result.rows;
+  const grandTotal = rows.reduce((sum, r) => sum + r.total_items_sold, 0) || 1;
+
+  return rows.map((row) => ({
+    brand: row.brand,
+    total_items_sold: row.total_items_sold,
+    percentage: Number(((row.total_items_sold / grandTotal) * 100).toFixed(1)),
+  }));
 }
 
 export async function getReportRows(period, startDate, endDate) {

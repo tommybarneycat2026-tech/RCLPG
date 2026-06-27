@@ -1,10 +1,10 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { api, formatCurrency } from '../api/client';
 import { useToast } from '../context/ToastContext';
 import LoadingSpinner from '../components/LoadingSpinner';
 import Modal from '../components/Modal';
 
-const BRANDS = ['Regasco', 'Pryce', 'Seagas'];
+const BRANDS = ['Regasco', 'Seagas', 'Pryce'];
 const WEIGHTS = [2.7, 5, 11, 22, 50];
 const STATUSES = ['Filled Tank', 'Empty Cylinder'];
 
@@ -17,37 +17,97 @@ const emptyForm = {
   wholesalePrice: '',
 };
 
+function healthBadgeClass(indicator) {
+  if (indicator === 'Out of Stock') return 'bg-red-50 text-red-700';
+  if (indicator === 'Low Stock') return 'bg-amber-50 text-amber-700';
+  return 'bg-emerald-50 text-emerald-700';
+}
+
+function InventoryTable({ products, onEdit, onDelete }) {
+  if (!products.length) {
+    return <p className="text-xs text-slate-400 italic py-3">No products match the current filters.</p>;
+  }
+
+  return (
+    <div className="overflow-x-auto border border-slate-100 rounded-xl">
+      <table className="w-full text-left text-xs sm:text-sm whitespace-nowrap">
+        <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold uppercase tracking-wider">
+          <tr>
+            <th className="p-3">Weight</th>
+            <th className="p-3 text-center">Stock</th>
+            <th className="p-3 text-center">Health Status</th>
+            <th className="p-3 text-right">Retail Price</th>
+            <th className="p-3 text-right">Wholesale Price</th>
+            <th className="p-3 text-center">Actions</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
+          {products.map((p) => (
+            <tr key={p.product_id}>
+              <td className="p-3 font-bold">{p.weight_class}kg</td>
+              <td className="p-3 text-center font-black">{p.stock_quantity}</td>
+              <td className="p-3 text-center">
+                <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-black uppercase ${healthBadgeClass(p.health_indicator)}`}>
+                  {p.health_indicator}
+                </span>
+              </td>
+              <td className="p-3 text-right">{formatCurrency(p.regular_retail)}</td>
+              <td className="p-3 text-right text-red-600">{formatCurrency(p.wholesale_price)}</td>
+              <td className="p-3 text-center space-x-1">
+                <button type="button" onClick={() => onEdit(p)} className="text-xs font-bold bg-amber-100 hover:bg-amber-500 hover:text-white px-2.5 py-1 rounded-lg">Edit</button>
+                <button type="button" onClick={() => onDelete(p)} className="text-xs font-bold bg-red-50 text-red-600 hover:bg-red-600 hover:text-white px-2.5 py-1 rounded-lg">Delete</button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 export default function InventoryPage() {
   const { showToast } = useToast();
   const [products, setProducts] = useState([]);
-  const [summary, setSummary] = useState([]);
-  const [search, setSearch] = useState('');
-  const [showArchived, setShowArchived] = useState(false);
+  const [brandFilter, setBrandFilter] = useState('');
+  const [conditionFilter, setConditionFilter] = useState('');
+  const [stockTierFilter, setStockTierFilter] = useState('');
   const [loading, setLoading] = useState(true);
+  const [addModalOpen, setAddModalOpen] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const [editProduct, setEditProduct] = useState(null);
-  const [archiveTarget, setArchiveTarget] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
   const [saving, setSaving] = useState(false);
 
   const loadData = useCallback(async () => {
     try {
       setLoading(true);
-      const [productsRes, summaryRes] = await Promise.all([
-        api.getProducts({ search, archived: String(showArchived) }),
-        api.getWeeklySummary(),
-      ]);
+      const params = {};
+      if (brandFilter) params.brand = brandFilter;
+      if (conditionFilter) params.condition = conditionFilter;
+      if (stockTierFilter) params.stockTier = stockTierFilter;
+      const productsRes = await api.getProducts(params);
       setProducts(productsRes.data);
-      setSummary(summaryRes.data);
     } catch (err) {
       showToast('Load Failed', err.message, 'error');
     } finally {
       setLoading(false);
     }
-  }, [search, showArchived, showToast]);
+  }, [brandFilter, conditionFilter, stockTierFilter, showToast]);
 
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  const groupedByBrand = useMemo(() => {
+    const groups = {};
+    BRANDS.forEach((b) => {
+      groups[b] = {
+        filled: products.filter((p) => p.brand === b && p.status === 'Filled Tank'),
+        empty: products.filter((p) => p.brand === b && p.status === 'Empty Cylinder'),
+      };
+    });
+    return groups;
+  }, [products]);
 
   const handleCreate = async (e) => {
     e.preventDefault();
@@ -63,6 +123,7 @@ export default function InventoryPage() {
       });
       showToast('Record Created', 'Product saved successfully.');
       setForm(emptyForm);
+      setAddModalOpen(false);
       await loadData();
     } catch (err) {
       showToast('Save Failed', err.message, 'error');
@@ -93,16 +154,16 @@ export default function InventoryPage() {
     }
   };
 
-  const confirmArchive = async () => {
-    if (!archiveTarget) return;
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
     try {
       setSaving(true);
-      await api.archiveProduct(archiveTarget.product_id);
-      showToast('Archived', 'Product moved to archive.');
-      setArchiveTarget(null);
+      await api.deleteProduct(deleteTarget.product_id);
+      showToast('Deleted', 'Product permanently removed.');
+      setDeleteTarget(null);
       await loadData();
     } catch (err) {
-      showToast('Archive Failed', err.message, 'error');
+      showToast('Delete Failed', err.message, 'error');
     } finally {
       setSaving(false);
     }
@@ -112,13 +173,96 @@ export default function InventoryPage() {
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4 lg:col-span-1">
-          <div className="border-b border-slate-100 pb-2">
-            <h2 className="text-base font-bold text-slate-900">Add New Product</h2>
-            <p className="text-xs text-slate-400">Product ID is generated automatically</p>
+      <section className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
+        <div className="border-b border-slate-100 pb-2">
+          <h2 className="text-base font-bold text-slate-900">Quick Catalog Interactive Filters</h2>
+          <p className="text-xs text-slate-400">All filters work together</p>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div>
+            <label htmlFor="brand-filter" className="block text-[11px] font-bold uppercase text-slate-500 mb-1">Brand</label>
+            <select id="brand-filter" value={brandFilter} onChange={(e) => setBrandFilter(e.target.value)} className="w-full text-xs p-2.5 border border-slate-200 rounded-xl">
+              <option value="">All Brands</option>
+              {BRANDS.map((b) => <option key={b} value={b}>{b}</option>)}
+            </select>
           </div>
-          <form onSubmit={handleCreate} className="space-y-3">
+          <div>
+            <label htmlFor="condition-filter" className="block text-[11px] font-bold uppercase text-slate-500 mb-1">Tank Condition</label>
+            <select id="condition-filter" value={conditionFilter} onChange={(e) => setConditionFilter(e.target.value)} className="w-full text-xs p-2.5 border border-slate-200 rounded-xl">
+              <option value="">All Conditions</option>
+              <option value="filled">Filled Tanks</option>
+              <option value="empty">Empty Cylinders</option>
+            </select>
+          </div>
+          <div>
+            <label htmlFor="stock-filter" className="block text-[11px] font-bold uppercase text-slate-500 mb-1">Live Stock Warning Tier</label>
+            <select id="stock-filter" value={stockTierFilter} onChange={(e) => setStockTierFilter(e.target.value)} className="w-full text-xs p-2.5 border border-slate-200 rounded-xl">
+              <option value="">All Stocks</option>
+              <option value="out">Out of Stock</option>
+              <option value="low">Low Stock (&lt;5)</option>
+              <option value="good">Good Stock (&gt;5)</option>
+            </select>
+          </div>
+        </div>
+      </section>
+
+      <section className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+        <div className="flex items-center justify-between">
+          <h2 className="text-base font-bold text-slate-900">Catalog Action Controls</h2>
+          <button
+            type="button"
+            onClick={() => setAddModalOpen(true)}
+            className="bg-red-600 hover:bg-red-700 text-white font-bold text-xs px-5 py-2.5 rounded-xl"
+          >
+            Add New Product
+          </button>
+        </div>
+      </section>
+
+      <section className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-8">
+        <div className="border-b border-slate-100 pb-2">
+          <h2 className="text-lg font-bold text-slate-900">Inventory Holdings</h2>
+          <p className="text-xs text-slate-400">Grouped by brand — filtered dynamically</p>
+        </div>
+
+        {BRANDS.map((brand) => {
+          const { filled, empty } = groupedByBrand[brand];
+          if (!filled.length && !empty.length) return null;
+
+          return (
+            <div key={brand} className="space-y-4">
+              <h3 className="text-base font-black text-slate-800 border-l-4 border-red-600 pl-3">{brand}</h3>
+              {filled.length > 0 && (
+                <div className="space-y-2">
+                  <h4 className="text-xs font-bold uppercase text-indigo-600 tracking-wider">Filled Cylinders</h4>
+                  <InventoryTable products={filled} onEdit={setEditProduct} onDelete={setDeleteTarget} />
+                </div>
+              )}
+              {empty.length > 0 && (
+                <div className="space-y-2">
+                  <h4 className="text-xs font-bold uppercase text-slate-500 tracking-wider">Empty Cylinders</h4>
+                  <InventoryTable products={empty} onEdit={setEditProduct} onDelete={setDeleteTarget} />
+                </div>
+              )}
+            </div>
+          );
+        })}
+
+        {products.length === 0 && (
+          <p className="text-center text-slate-400 py-8">No inventory matches the selected filters.</p>
+        )}
+      </section>
+
+      {addModalOpen && (
+        <Modal title="Add New Product" onClose={() => setAddModalOpen(false)} size="lg" footer={
+          <>
+            <button type="button" onClick={() => setAddModalOpen(false)} className="px-4 py-2 rounded-xl bg-slate-100 text-sm font-bold">Cancel</button>
+            <button type="submit" form="add-product-form" disabled={saving} className="px-4 py-2 rounded-xl bg-red-600 text-white text-sm font-bold">
+              {saving ? 'Saving...' : 'Save Product Record'}
+            </button>
+          </>
+        }>
+          <form id="add-product-form" onSubmit={handleCreate} className="space-y-3">
             <div className="grid grid-cols-2 gap-2">
               <div>
                 <label htmlFor="brand" className="block text-[11px] font-bold uppercase text-slate-500 mb-1">Brand</label>
@@ -155,98 +299,9 @@ export default function InventoryPage() {
                 <input id="wholesale" type="number" step="0.01" required value={form.wholesalePrice} onChange={(e) => setForm({ ...form, wholesalePrice: e.target.value })} className="w-full text-xs p-2.5 border border-slate-200 rounded-xl" />
               </div>
             </div>
-            <button type="submit" disabled={saving} className="w-full bg-red-600 hover:bg-red-700 text-white font-bold text-xs px-5 py-2.5 rounded-xl">
-              Save Product Record
-            </button>
           </form>
-        </div>
-
-        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4 lg:col-span-2">
-          <div className="border-b border-slate-100 pb-2">
-            <h2 className="text-base font-bold text-slate-900">Weekly Stocks Summary</h2>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs whitespace-nowrap">
-              <thead className="bg-slate-100 text-slate-600 font-bold uppercase tracking-wider">
-                <tr>
-                  <th className="p-3 rounded-l-lg">Weight Class</th>
-                  <th className="p-3 text-center">Filled Stock Units</th>
-                  <th className="p-3 text-center">Empty Stock Units</th>
-                  <th className="p-3 text-right rounded-r-lg">Combined Storage Volume</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
-                {summary.map((row) => (
-                  <tr key={row.weight_class}>
-                    <td className="p-3 font-bold text-slate-900">{row.weight_class}kg Class</td>
-                    <td className="p-3 text-center text-indigo-600 font-bold">{row.filled_stock} Units</td>
-                    <td className="p-3 text-center text-slate-500 font-bold">{row.empty_stock} Units</td>
-                    <td className="p-3 text-right font-black text-slate-800 bg-slate-50/60">{row.combined_volume} Total</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-
-      <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-100 pb-4">
-          <div>
-            <h2 className="text-lg font-bold text-slate-900">Inventory Catalog</h2>
-            <div className="flex gap-2 mt-2">
-              <button type="button" onClick={() => setShowArchived(false)} className={`text-xs font-bold px-3 py-1 rounded-lg ${!showArchived ? 'bg-red-50 text-red-600' : 'bg-slate-100 text-slate-600'}`}>Active</button>
-              <button type="button" onClick={() => setShowArchived(true)} className={`text-xs font-bold px-3 py-1 rounded-lg ${showArchived ? 'bg-red-50 text-red-600' : 'bg-slate-100 text-slate-600'}`}>Archived</button>
-            </div>
-          </div>
-          <div className="w-full sm:w-64">
-            <label htmlFor="inventory-search" className="sr-only">Search inventory</label>
-            <input id="inventory-search" type="search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search catalog..." className="w-full text-xs p-2.5 border border-slate-200 rounded-xl" />
-          </div>
-        </div>
-
-        <div className="overflow-x-auto border border-slate-100 rounded-xl">
-          <table className="w-full text-left text-xs sm:text-sm whitespace-nowrap">
-            <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold uppercase tracking-wider">
-              <tr>
-                <th className="p-3">Brand</th>
-                <th className="p-3">Weight Class</th>
-                <th className="p-3">Status</th>
-                <th className="p-3 text-center">Stock Qty</th>
-                <th className="p-3 text-center">Health Indicator</th>
-                <th className="p-3 text-right">Regular Retail</th>
-                <th className="p-3 text-right">Wholesale Price</th>
-                <th className="p-3 text-center">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
-              {products.map((p) => (
-                <tr key={p.product_id}>
-                  <td className="p-3 font-semibold">{p.brand}</td>
-                  <td className="p-3 font-bold">{p.weight_class}kg</td>
-                  <td className="p-3">{p.status}</td>
-                  <td className="p-3 text-center font-black">{p.stock_quantity}</td>
-                  <td className="p-3 text-center">
-                    <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-black uppercase ${p.health_indicator === 'Out of Stock' ? 'bg-red-50 text-red-700' : p.health_indicator === 'Low Stock' ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700'}`}>
-                      {p.health_indicator}
-                    </span>
-                  </td>
-                  <td className="p-3 text-right">{formatCurrency(p.regular_retail)}</td>
-                  <td className="p-3 text-right text-red-600">{formatCurrency(p.wholesale_price)}</td>
-                  <td className="p-3 text-center space-x-1">
-                    {!showArchived && (
-                      <>
-                        <button type="button" onClick={() => setEditProduct({ ...p })} className="text-xs font-bold bg-amber-100 hover:bg-amber-500 hover:text-white px-2.5 py-1 rounded-lg">Edit</button>
-                        <button type="button" onClick={() => setArchiveTarget(p)} className="text-xs font-bold bg-red-50 text-red-600 hover:bg-red-600 hover:text-white px-2.5 py-1 rounded-lg">Archive</button>
-                      </>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
+        </Modal>
+      )}
 
       {editProduct && (
         <Modal title={`Edit Product ${editProduct.product_id}`} onClose={() => setEditProduct(null)} footer={
@@ -278,15 +333,15 @@ export default function InventoryPage() {
         </Modal>
       )}
 
-      {archiveTarget && (
-        <Modal title="Archive Product" onClose={() => setArchiveTarget(null)} footer={
+      {deleteTarget && (
+        <Modal title="Delete Product" onClose={() => setDeleteTarget(null)} footer={
           <>
-            <button type="button" onClick={() => setArchiveTarget(null)} className="px-4 py-2 rounded-xl bg-slate-100 text-sm font-bold">Cancel</button>
-            <button type="button" disabled={saving} onClick={confirmArchive} className="px-4 py-2 rounded-xl bg-red-600 text-white text-sm font-bold">Confirm Archive</button>
+            <button type="button" onClick={() => setDeleteTarget(null)} className="px-4 py-2 rounded-xl bg-slate-100 text-sm font-bold">Cancel</button>
+            <button type="button" disabled={saving} onClick={confirmDelete} className="px-4 py-2 rounded-xl bg-red-600 text-white text-sm font-bold">Confirm Delete</button>
           </>
         }>
           <p className="text-sm text-slate-600">
-            Archive product <strong>{archiveTarget.product_id}</strong>? This will hide it from active inventory without deleting the record.
+            Permanently delete product <strong>{deleteTarget.product_id}</strong> ({deleteTarget.brand} {deleteTarget.weight_class}kg)? This action cannot be undone.
           </p>
         </Modal>
       )}
