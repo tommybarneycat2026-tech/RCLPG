@@ -8,6 +8,8 @@ const router = Router();
 router.use(authenticate);
 
 router.get('/metrics', dashboardController.getMetrics);
+router.get('/sales-report', ...dashboardController.getSalesReport, validate);
+router.get('/daily-metrics', ...dashboardController.getDailyMetrics, validate);
 router.get('/export', ...dashboardController.exportReport, validate);
 
 export default router;

@@ -146,6 +146,7 @@ export default function SalesLogPage() {
               productId: selectedSale.product_id,
               quantity: selectedSale.sale_quantity,
               unitPrice: selectedSale.unit_price,
+              lpgTankVariant: selectedSale.lpg_tank_variant || 'Regasco',
             }}
             submitLabel={saving ? 'Saving...' : 'Commit Entry Correction'}
             onSubmit={handleOverride}
@@ -163,6 +164,7 @@ export default function SalesLogPage() {
               <th className="p-3">Phone Number</th>
               <th className="p-3">Price Type</th>
               <th className="p-3">Product Specification</th>
+              <th className="p-3">Customer LPG Tank</th>
               <th className="p-3 text-center">Qty</th>
               <th className="p-3 text-right">Unit Price</th>
               <th className="p-3 text-right">Total Billing</th>
@@ -178,6 +180,7 @@ export default function SalesLogPage() {
                 <td className="p-3 font-mono text-xs">{sale.phone_number || <span className="text-slate-300 italic">-</span>}</td>
                 <td className="p-3">{sale.price_type}</td>
                 <td className="p-3">{sale.brand} - {sale.weight_class}kg - {sale.product_status}</td>
+                <td className="p-3 font-semibold text-indigo-700">{sale.lpg_tank_variant || <span className="text-slate-300 italic">-</span>}</td>
                 <td className="p-3 text-center font-bold">{sale.sale_quantity}</td>
                 <td className="p-3 text-right">{formatCurrency(sale.unit_price)}</td>
                 <td className="p-3 text-right text-red-600 font-extrabold">{formatCurrency(sale.total_amount)}</td>
@@ -188,7 +191,7 @@ export default function SalesLogPage() {
               </tr>
             ))}
             {sales.length === 0 && (
-              <tr><td colSpan={10} className="text-center py-8 text-slate-400">No transactions found.</td></tr>
+              <tr><td colSpan={11} className="text-center py-8 text-slate-400">No transactions found.</td></tr>
             )}
           </tbody>
         </table>

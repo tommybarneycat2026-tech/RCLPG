@@ -4,6 +4,7 @@ import { api, formatCurrency } from '../api/client';
 import { useToast } from '../context/ToastContext';
 import LoadingSpinner from '../components/LoadingSpinner';
 import RecordSaleModal from '../components/RecordSaleModal';
+import SalesReportSection from '../components/SalesReportSection';
 
 const BRAND_COLORS = {
   Regasco: 'bg-red-500',
@@ -18,6 +19,7 @@ export default function DashboardPage() {
   const [pagination, setPagination] = useState({ page: 1, totalPages: 1 });
   const [loading, setLoading] = useState(true);
   const [saleModalOpen, setSaleModalOpen] = useState(false);
+  const [reportRefreshKey, setReportRefreshKey] = useState(0);
 
   const loadData = useCallback(async (page = 1) => {
     try {
@@ -40,6 +42,11 @@ export default function DashboardPage() {
     loadData();
   }, [loadData]);
 
+  const handleSaleSuccess = () => {
+    loadData(pagination.page);
+    setReportRefreshKey((k) => k + 1);
+  };
+
   if (loading && !metrics) return <LoadingSpinner />;
 
   const lowStock = metrics?.lowStockProducts || [];
@@ -53,10 +60,6 @@ export default function DashboardPage() {
           <p className="text-2xl font-bold text-slate-900 mt-1">{metrics?.totalItemsSold || 0} Items</p>
         </article>
         <article className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
-          <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Total Revenue</p>
-          <p className="text-2xl font-bold text-red-600 mt-1">{formatCurrency(metrics?.totalRevenue)}</p>
-        </article>
-        <article className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
           <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Total Filled Stock</p>
           <p className="text-2xl font-bold text-indigo-600 mt-1">{metrics?.totalFilledStock || 0} Tanks</p>
         </article>
@@ -68,9 +71,7 @@ export default function DashboardPage() {
 
       {lowStock.length > 0 && (
         <div className="bg-amber-50 border border-amber-200 rounded-xl p-5 space-y-3 shadow-sm" role="alert">
-          <div className="flex items-center space-x-2 text-amber-800">
-            <h3 className="text-sm font-bold uppercase tracking-wider">Low Stock Reminder</h3>
-          </div>
+          <h3 className="text-sm font-bold uppercase tracking-wider text-amber-800">Low Stock Reminder</h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 text-xs font-semibold text-amber-900">
             {lowStock.map((item) => (
               <div key={item.product_id} className="bg-white p-2.5 rounded-lg border border-amber-200 shadow-sm flex items-center justify-between">
@@ -99,10 +100,12 @@ export default function DashboardPage() {
         </button>
       </div>
 
+      <SalesReportSection refreshKey={reportRefreshKey} />
+
       {brandMetrics.length > 0 && (
         <section className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4" aria-label="Brand sales volume distribution">
           <div className="border-b border-slate-100 pb-3">
-            <h2 className="text-lg font-bold text-slate-900">Brand Sales Volume Distribution</h2>
+            <h2 className="text-lg font-bold text-slate-900">Brand Sales Metric Volume Distribution</h2>
             <p className="text-xs text-slate-400">Items sold by brand across all active sales</p>
           </div>
           <div className="space-y-4">
@@ -148,6 +151,7 @@ export default function DashboardPage() {
                 <th className="p-3">Customer</th>
                 <th className="p-3">FB Profile</th>
                 <th className="p-3">Product Details</th>
+                <th className="p-3">Customer LPG</th>
                 <th className="p-3 text-center">Qty</th>
                 <th className="p-3 text-right">Total</th>
               </tr>
@@ -158,13 +162,14 @@ export default function DashboardPage() {
                   <td className="p-3 font-bold text-slate-800">{sale.customer_name}</td>
                   <td className="p-3">{sale.fb_name || <span className="text-slate-300 italic">-</span>}</td>
                   <td className="p-3">{sale.brand} - {sale.weight_class}kg - {sale.product_status}</td>
+                  <td className="p-3">{sale.lpg_tank_variant || '-'}</td>
                   <td className="p-3 text-center font-bold">{sale.sale_quantity}</td>
                   <td className="p-3 text-right text-red-600 font-bold">{formatCurrency(sale.total_amount)}</td>
                 </tr>
               ))}
               {recentSales.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="text-center py-4 text-slate-400">No sales recorded today.</td>
+                  <td colSpan={6} className="text-center py-4 text-slate-400">No sales recorded today.</td>
                 </tr>
               )}
             </tbody>
@@ -172,34 +177,14 @@ export default function DashboardPage() {
         </div>
         {pagination.totalPages > 1 && (
           <nav className="flex justify-end gap-2" aria-label="Recent sales pagination">
-            <button
-              type="button"
-              disabled={pagination.page <= 1}
-              onClick={() => loadData(pagination.page - 1)}
-              className="px-3 py-1 rounded-lg bg-slate-100 text-xs font-bold disabled:opacity-50"
-            >
-              Previous
-            </button>
-            <span className="text-xs self-center">
-              Page {pagination.page} of {pagination.totalPages}
-            </span>
-            <button
-              type="button"
-              disabled={pagination.page >= pagination.totalPages}
-              onClick={() => loadData(pagination.page + 1)}
-              className="px-3 py-1 rounded-lg bg-slate-100 text-xs font-bold disabled:opacity-50"
-            >
-              Next
-            </button>
+            <button type="button" disabled={pagination.page <= 1} onClick={() => loadData(pagination.page - 1)} className="px-3 py-1 rounded-lg bg-slate-100 text-xs font-bold disabled:opacity-50">Previous</button>
+            <span className="text-xs self-center">Page {pagination.page} of {pagination.totalPages}</span>
+            <button type="button" disabled={pagination.page >= pagination.totalPages} onClick={() => loadData(pagination.page + 1)} className="px-3 py-1 rounded-lg bg-slate-100 text-xs font-bold disabled:opacity-50">Next</button>
           </nav>
         )}
       </div>
 
-      <RecordSaleModal
-        open={saleModalOpen}
-        onClose={() => setSaleModalOpen(false)}
-        onSuccess={() => loadData(pagination.page)}
-      />
+      <RecordSaleModal open={saleModalOpen} onClose={() => setSaleModalOpen(false)} onSuccess={handleSaleSuccess} />
     </div>
   );
 }

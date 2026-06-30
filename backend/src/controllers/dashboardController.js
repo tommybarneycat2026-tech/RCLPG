@@ -55,3 +55,31 @@ export const exportReport = [
     return res.send(buffer);
   }),
 ];
+
+export const getSalesReport = [
+  q('quickFilter').optional().isIn(['today', 'week', 'month', 'year', 'custom']),
+  q('startDate').optional().isISO8601(),
+  q('endDate').optional().isISO8601(),
+  asyncHandler(async (req, res) => {
+    const data = await salesService.getSalesReport({
+      quickFilter: req.query.quickFilter || 'month',
+      startDate: req.query.startDate,
+      endDate: req.query.endDate,
+    });
+    res.json({ success: true, data });
+  }),
+];
+
+export const getDailyMetrics = [
+  q('quickFilter').optional().isIn(['today', 'week', 'month', 'year', 'custom']),
+  q('startDate').optional().isISO8601(),
+  q('endDate').optional().isISO8601(),
+  asyncHandler(async (req, res) => {
+    const data = await salesService.getDailyMetrics({
+      quickFilter: req.query.quickFilter || 'month',
+      startDate: req.query.startDate,
+      endDate: req.query.endDate,
+    });
+    res.json({ success: true, data });
+  }),
+];

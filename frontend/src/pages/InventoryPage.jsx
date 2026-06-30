@@ -69,6 +69,7 @@ function InventoryTable({ products, onEdit, onDelete }) {
 export default function InventoryPage() {
   const { showToast } = useToast();
   const [products, setProducts] = useState([]);
+  const [brandOverview, setBrandOverview] = useState([]);
   const [brandFilter, setBrandFilter] = useState('');
   const [conditionFilter, setConditionFilter] = useState('');
   const [stockTierFilter, setStockTierFilter] = useState('');
@@ -86,8 +87,12 @@ export default function InventoryPage() {
       if (brandFilter) params.brand = brandFilter;
       if (conditionFilter) params.condition = conditionFilter;
       if (stockTierFilter) params.stockTier = stockTierFilter;
-      const productsRes = await api.getProducts(params);
+      const [productsRes, overviewRes] = await Promise.all([
+        api.getProducts(params),
+        api.getBrandOverview(),
+      ]);
       setProducts(productsRes.data);
+      setBrandOverview(overviewRes.data);
     } catch (err) {
       showToast('Load Failed', err.message, 'error');
     } finally {
@@ -174,6 +179,46 @@ export default function InventoryPage() {
 
   return (
     <div className="space-y-6">
+      <section className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
+        <div className="border-b border-slate-100 pb-2">
+          <h2 className="text-base font-bold text-slate-900">Inventory Brand Overview</h2>
+          <p className="text-xs text-slate-400">Live summary by brand — updates on every inventory change</p>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          {BRANDS.map((brand) => {
+            const data = brandOverview.find((b) => b.brand === brand) || {
+              total_filled: 0,
+              total_empty: 0,
+              total_combined: 0,
+            };
+            return (
+              <article key={brand} className="rounded-xl border border-slate-200 p-4 bg-gradient-to-br from-white to-slate-50 shadow-sm">
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-red-100 text-red-700 text-xs font-black" aria-hidden="true">
+                    {brand.slice(0, 2).toUpperCase()}
+                  </span>
+                  <h3 className="text-sm font-black text-slate-900">{brand}</h3>
+                </div>
+                <dl className="space-y-2 text-xs">
+                  <div className="flex justify-between">
+                    <dt className="text-slate-500 font-semibold">Total Filled Tanks</dt>
+                    <dd className="font-bold text-indigo-600">{data.total_filled}</dd>
+                  </div>
+                  <div className="flex justify-between">
+                    <dt className="text-slate-500 font-semibold">Total Empty Cylinders</dt>
+                    <dd className="font-bold text-slate-600">{data.total_empty}</dd>
+                  </div>
+                  <div className="flex justify-between border-t border-slate-100 pt-2">
+                    <dt className="text-slate-700 font-bold">Total Combined</dt>
+                    <dd className="font-black text-slate-900">{data.total_combined}</dd>
+                  </div>
+                </dl>
+              </article>
+            );
+          })}
+        </div>
+      </section>
+
       <section className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
         <div className="border-b border-slate-100 pb-2">
           <h2 className="text-base font-bold text-slate-900">Quick Catalog Interactive Filters</h2>
@@ -312,7 +357,8 @@ export default function InventoryPage() {
               <select value={editProduct.brand} onChange={(e) => setEditProduct({ ...editProduct, brand: e.target.value })} className="w-full p-2 border rounded-lg">{BRANDS.map((b) => <option key={b}>{b}</option>)}</select>
             </label>
             <label className="space-y-1"><span className="text-xs font-bold uppercase text-slate-500">Weight</span>
-              <select value={editProduct.weight_class} onChange={(e) => setEditProduct({ ...editProduct, weight_class: e.target.value })} className="w-full p-2 border rounded-lg">{WEIGHTS.map((w) => <option key={w} value={w}>{w}kg</option>)}</select>
+              <select value={editProduct.weight_class} onChange={(e) => 
+                setEditProduct({ ...editProduct, weight_class: e.target.value })} className="w-full p-2 border rounded-lg">{WEIGHTS.map((w) => <option key={w} value={w}>{w}kg</option>)}</select>
             </label>
             <label className="space-y-1"><span className="text-xs font-bold uppercase text-slate-500">Status</span>
               <select value={editProduct.status} onChange={(e) => setEditProduct({ ...editProduct, status: e.target.value })} className="w-full p-2 border rounded-lg">{STATUSES.map((s) => <option key={s}>{s}</option>)}</select>

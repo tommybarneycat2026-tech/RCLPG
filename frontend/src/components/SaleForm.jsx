@@ -1,5 +1,7 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { formatCurrency } from '../api/client';
+
+const TANK_BRANDS = ['Regasco', 'Seagas', 'Pryce'];
 
 function productOptionLabel(product) {
   const statusShort = product.status === 'Filled Tank' ? 'Filled' : 'Empty';
@@ -33,10 +35,16 @@ export default function SaleForm({
   const [productId, setProductId] = useState(initialValues?.productId || '');
   const [quantity, setQuantity] = useState(initialValues?.quantity || 1);
   const [unitPrice, setUnitPrice] = useState(initialValues?.unitPrice || 0);
+  const [lpgTankVariant, setLpgTankVariant] = useState(initialValues?.lpgTankVariant || 'Regasco');
+
+  const filledProducts = useMemo(
+    () => products.filter((p) => p.status === 'Filled Tank'),
+    [products]
+  );
 
   const filteredProducts = useMemo(
-    () => products.filter((p) => p.brand === brand),
-    [products, brand]
+    () => filledProducts.filter((p) => p.brand === brand),
+    [filledProducts, brand]
   );
 
   const selectedProduct = products.find((p) => p.product_id === productId);
@@ -83,6 +91,7 @@ export default function SaleForm({
       productId,
       quantity: Number(quantity),
       unitPrice: Number(unitPrice),
+      lpgTankVariant,
     });
   };
 
@@ -110,16 +119,8 @@ export default function SaleForm({
 
         {mode === 'existing' ? (
           <div>
-            <label htmlFor="customer-select" className="block text-xs font-bold uppercase text-slate-500 mb-1">
-              Customer Name
-            </label>
-            <select
-              id="customer-select"
-              value={customerId}
-              onChange={(e) => setCustomerId(e.target.value)}
-              required
-              className="w-full text-sm py-3 px-4 border border-slate-200 bg-white rounded-xl"
-            >
+            <label htmlFor="customer-select" className="block text-xs font-bold uppercase text-slate-500 mb-1">Customer Name</label>
+            <select id="customer-select" value={customerId} onChange={(e) => setCustomerId(e.target.value)} required className="w-full text-sm py-3 px-4 border border-slate-200 bg-white rounded-xl">
               <option value="">Select customer</option>
               {customers.map((c) => (
                 <option key={c.customer_id} value={c.customer_id}>{c.name}</option>
@@ -128,9 +129,7 @@ export default function SaleForm({
           </div>
         ) : (
           <div>
-            <label htmlFor="customer-name" className="block text-xs font-bold uppercase text-slate-500 mb-1">
-              Customer Name
-            </label>
+            <label htmlFor="customer-name" className="block text-xs font-bold uppercase text-slate-500 mb-1">Customer Name</label>
             <input id="customer-name" value={customerName} onChange={(e) => setCustomerName(e.target.value)} required className="w-full text-sm p-3 border border-slate-200 rounded-xl" />
           </div>
         )}
@@ -158,12 +157,7 @@ export default function SaleForm({
           <div className="space-y-3">
             <div>
               <label htmlFor="payment-method" className="block text-xs font-bold uppercase text-slate-500 mb-1">Payment Method</label>
-              <select
-                id="payment-method"
-                value={paymentMethod}
-                onChange={(e) => setPaymentMethod(e.target.value)}
-                className="w-full text-sm py-3 px-4 border border-slate-200 bg-white rounded-xl"
-              >
+              <select id="payment-method" value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)} className="w-full text-sm py-3 px-4 border border-slate-200 bg-white rounded-xl">
                 <option value="Fully Paid">Fully Paid</option>
                 <option value="Credit">Credit</option>
               </select>
@@ -173,17 +167,7 @@ export default function SaleForm({
                 <label htmlFor="initial-payment" className="block text-xs font-bold uppercase text-slate-500 mb-1">
                   Initial Payment <span className="font-normal normal-case text-slate-400">(optional)</span>
                 </label>
-                <input
-                  id="initial-payment"
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  max={total}
-                  value={initialPayment}
-                  onChange={(e) => setInitialPayment(e.target.value)}
-                  placeholder="0.00"
-                  className="w-full text-sm p-3 border border-slate-200 rounded-xl"
-                />
+                <input id="initial-payment" type="number" step="0.01" min="0" max={total} value={initialPayment} onChange={(e) => setInitialPayment(e.target.value)} placeholder="0.00" className="w-full text-sm p-3 border border-slate-200 rounded-xl" />
               </div>
             )}
           </div>
@@ -191,7 +175,7 @@ export default function SaleForm({
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
-            <label htmlFor="brand" className="block text-xs font-bold uppercase text-slate-500 mb-1">Brand</label>
+            <label htmlFor="brand" className="block text-xs font-bold uppercase text-slate-500 mb-1">Brand (Filled Tank Sold)</label>
             <select id="brand" value={brand} onChange={(e) => setBrand(e.target.value)} className="w-full text-sm py-3 px-4 border border-slate-200 bg-white rounded-xl">
               {brands.map((b) => (
                 <option key={b} value={b}>{b}</option>
@@ -218,6 +202,19 @@ export default function SaleForm({
             <input id="unit-price" type="number" step="0.01" value={unitPrice} onChange={(e) => setUnitPrice(e.target.value)} required className="w-full text-sm p-2 bg-amber-50 border border-amber-300 rounded-lg text-center font-bold" />
           </div>
         </div>
+
+        <fieldset className="space-y-2 bg-indigo-50/50 p-3 rounded-xl border border-indigo-100">
+          <legend className="text-xs font-bold uppercase text-indigo-700 px-1">Customer LPG Tank</legend>
+          <p className="text-[11px] text-slate-500">Brand of the empty cylinder returned by the customer (same weight as filled tank sold)</p>
+          <div>
+            <label htmlFor="customer-lpg" className="block text-xs font-bold uppercase text-slate-500 mb-1">Customer LPG</label>
+            <select id="customer-lpg" value={lpgTankVariant} onChange={(e) => setLpgTankVariant(e.target.value)} required className="w-full text-sm py-3 px-4 border border-slate-200 bg-white rounded-xl">
+              {TANK_BRANDS.map((b) => (
+                <option key={b} value={b}>{b}</option>
+              ))}
+            </select>
+          </div>
+        </fieldset>
 
         <div className="flex items-center justify-between pt-1">
           <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Total Bill Summary:</span>

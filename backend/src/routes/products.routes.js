@@ -15,6 +15,7 @@ router.delete('/:productId', ...productController.deleteProduct, validate);
 
 // Static endpoints
 router.get('/summary/weekly', productController.weeklySummary);
+router.get('/summary/brands', productController.brandOverview);
 router.get('/alerts/low-stock', productController.lowStock);
 
 export default router;

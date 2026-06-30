@@ -1,6 +1,6 @@
 import { body, param, query as q } from 'express-validator';
 import * as salesService from '../services/salesService.js';
-import { PRICE_TYPES, PAYMENT_METHODS } from '../utils/constants.js';
+import { BRANDS, PRICE_TYPES, PAYMENT_METHODS } from '../utils/constants.js';
 import { asyncHandler } from '../middleware/errorHandler.js';
 
 export const listSales = [
@@ -32,6 +32,7 @@ export const createSale = [
   body('priceType').isIn(PRICE_TYPES).withMessage('Invalid price type'),
   body('paymentMethod').optional().isIn(PAYMENT_METHODS).withMessage('Invalid payment method'),
   body('initialPayment').optional().isFloat({ min: 0 }).withMessage('Initial payment must be non-negative'),
+  body('lpgTankVariant').isIn(BRANDS).withMessage('Customer LPG tank brand is required'),
   body('customerId').optional().isUUID(),
   body('customerName').if(body('customerId').not().exists()).notEmpty().withMessage('Customer name is required'),
   asyncHandler(async (req, res) => {
@@ -46,6 +47,7 @@ export const createSale = [
       priceType: req.body.priceType,
       paymentMethod: req.body.paymentMethod || 'Fully Paid',
       initialPayment: req.body.initialPayment,
+      lpgTankVariant: req.body.lpgTankVariant,
     });
     res.status(201).json({ success: true, data: sale });
   }),
@@ -58,6 +60,7 @@ export const updateSale = [
   body('quantity').isInt({ min: 1 }),
   body('unitPrice').isFloat({ min: 0 }),
   body('priceType').isIn(PRICE_TYPES),
+  body('lpgTankVariant').isIn(BRANDS),
   asyncHandler(async (req, res) => {
     const sale = await salesService.updateSale(req.params.saleId, {
       customerName: req.body.customerName,
@@ -67,6 +70,7 @@ export const updateSale = [
       quantity: req.body.quantity,
       unitPrice: req.body.unitPrice,
       priceType: req.body.priceType,
+      lpgTankVariant: req.body.lpgTankVariant,
     });
     res.json({ success: true, data: sale });
   }),

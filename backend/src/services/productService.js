@@ -50,7 +50,13 @@ export async function listProducts({
        CASE WHEN status = 'Filled Tank' THEN 0 ELSE 1 END`,
     params
   );
-  return result.rows;
+  
+  return result.rows.map((product) => ({
+    ...product,
+    weight_class: Number(product.weight_class),
+    regular_retail: Number(product.regular_retail),
+    wholesale_price: Number(product.wholesale_price),
+  }));
 }
 
 export async function getProductById(productId, client = null) {
@@ -192,4 +198,78 @@ export async function getInventoryMetrics() {
      FROM lpg_products`
   );
   return result.rows[0];
+}
+
+export async function findEmptyProduct(brand, weightClass, client = null) {
+  const runner = client ? client.query.bind(client) : query;
+  const result = await runner(
+    `SELECT * FROM lpg_products
+     WHERE brand = $1 AND weight_class = $2 AND status = 'Empty Cylinder'
+     LIMIT 1`,
+    [brand, weightClass]
+  );
+  return result.rows[0] || null;
+}
+
+export async function executeTankSwap({ filledProductId, emptyBrand, quantity }, client) {
+  const filled = await getProductById(filledProductId, client);
+  if (!filled) throw new AppError('Product not found', 404);
+  if (filled.status !== 'Filled Tank') {
+    throw new AppError('Sale product must be a filled tank', 400);
+  }
+
+  const empty = await findEmptyProduct(emptyBrand, filled.weight_class, client);
+  if (!empty) {
+    throw new AppError(
+      `No empty cylinder inventory found for ${emptyBrand} ${filled.weight_class}kg`,
+      400
+    );
+  }
+
+  if (quantity > filled.stock_quantity) {
+    throw new AppError(
+      `Insufficient filled stock. Available: ${filled.stock_quantity}, requested: ${quantity}`,
+      400
+    );
+  }
+
+  await adjustStock(filledProductId, -quantity, client);
+  await adjustStock(empty.product_id, quantity, client);
+
+  return { filled, empty };
+}
+
+export async function reverseTankSwap({ filledProductId, emptyBrand, quantity }, client) {
+  const filled = await getProductById(filledProductId, client);
+  if (!filled) throw new AppError('Product not found', 404);
+
+  const empty = await findEmptyProduct(emptyBrand, filled.weight_class, client);
+  if (!empty) {
+    throw new AppError(
+      `Cannot reverse swap: no empty cylinder record for ${emptyBrand} ${filled.weight_class}kg`,
+      400
+    );
+  }
+
+  await adjustStock(filledProductId, quantity, client);
+  await adjustStock(empty.product_id, -quantity, client);
+
+  return { filled, empty };
+}
+
+export async function getBrandInventoryOverview() {
+  const result = await query(
+    `SELECT brand,
+            COALESCE(SUM(CASE WHEN status = 'Filled Tank' THEN stock_quantity ELSE 0 END), 0)::int AS total_filled,
+            COALESCE(SUM(CASE WHEN status = 'Empty Cylinder' THEN stock_quantity ELSE 0 END), 0)::int AS total_empty
+     FROM lpg_products
+     GROUP BY brand
+     ORDER BY brand ASC`
+  );
+  return result.rows.map((row) => ({
+    brand: row.brand,
+    total_filled: row.total_filled,
+    total_empty: row.total_empty,
+    total_combined: row.total_filled + row.total_empty,
+  }));
 }

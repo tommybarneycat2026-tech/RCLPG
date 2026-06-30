@@ -73,6 +73,11 @@ export const weeklySummary = asyncHandler(async (_req, res) => {
   res.json({ success: true, data });
 });
 
+export const brandOverview = asyncHandler(async (_req, res) => {
+  const data = await productService.getBrandInventoryOverview();
+  res.json({ success: true, data });
+});
+
 export const lowStock = asyncHandler(async (_req, res) => {
   const data = await productService.getLowStockProducts();
   res.json({ success: true, data });

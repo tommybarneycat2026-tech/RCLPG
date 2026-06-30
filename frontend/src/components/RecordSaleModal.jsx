@@ -116,6 +116,7 @@ export default function RecordSaleModal({ open, onClose, onSuccess }) {
             )}
             <div className="flex justify-between"><dt className="text-slate-500">Product</dt><dd>{confirmSale.productLabel}</dd></div>
             <div className="flex justify-between"><dt className="text-slate-500">Quantity</dt><dd>{confirmSale.quantity}</dd></div>
+            <div className="flex justify-between"><dt className="text-slate-500">Customer LPG (Empty Returned)</dt><dd className="font-semibold">{confirmSale.lpgTankVariant}</dd></div>
             <div className="flex justify-between"><dt className="text-slate-500">Unit Price</dt><dd>{formatCurrency(confirmSale.unitPrice)}</dd></div>
             <div className="flex justify-between border-t pt-2"><dt className="font-bold">Total</dt><dd className="font-black text-red-600">{formatCurrency(confirmSale.total)}</dd></div>
           </dl>

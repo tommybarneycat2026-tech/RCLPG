@@ -1,8 +1,34 @@
 import pool, { query } from '../config/db.js';
 import { AppError } from '../middleware/errorHandler.js';
+import { BRANDS } from '../utils/constants.js';
 import * as productService from './productService.js';
 import * as customerService from './customerService.js';
 import * as creditService from './creditService.js';
+
+function buildReportDateFilter(quickFilter, startDate, endDate) {
+  const clauses = [];
+  const params = [];
+  let idx = 1;
+
+  if (quickFilter === 'today') {
+    clauses.push(`DATE(sr.date_created AT TIME ZONE 'UTC') = CURRENT_DATE`);
+  } else if (quickFilter === 'week') {
+    clauses.push(`sr.date_created >= DATE_TRUNC('week', CURRENT_DATE)`);
+  } else if (quickFilter === 'month') {
+    clauses.push(`sr.date_created >= DATE_TRUNC('month', CURRENT_DATE)`);
+  } else if (quickFilter === 'year') {
+    clauses.push(`sr.date_created >= DATE_TRUNC('year', CURRENT_DATE)`);
+  } else if (startDate && endDate) {
+    clauses.push(`DATE(sr.date_created) BETWEEN $${idx++} AND $${idx++}`);
+    params.push(startDate, endDate);
+  }
+
+  return {
+    where: clauses.length ? `AND ${clauses.join(' AND ')}` : '',
+    params,
+    nextIdx: idx,
+  };
+}
 
 function buildDateFilter(period, startDate, endDate) {
   const clauses = [];
@@ -91,7 +117,8 @@ export async function listSales({
 
   const dataResult = await query(
     `SELECT sr.sale_id, sr.customer_id, sr.product_id, sr.status, sr.sale_quantity,
-            sr.price_type, sr.unit_price, sr.total_amount, sr.date_created, sr.date_updated,
+            sr.price_type, sr.unit_price, sr.total_amount, sr.lpg_tank_variant,
+            sr.date_created, sr.date_updated,
             c.name AS customer_name, c.fb_name, c.phone_number,
             p.brand, p.weight_class, p.status AS product_status
      FROM sales_records sr
@@ -128,6 +155,10 @@ export async function getSaleById(saleId) {
 }
 
 export async function createSale(payload) {
+  if (!payload.lpgTankVariant || !BRANDS.includes(payload.lpgTankVariant)) {
+    throw new AppError('Customer LPG tank brand is required', 400);
+  }
+
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -143,21 +174,26 @@ export async function createSale(payload) {
     if (!product) {
       throw new AppError('Selected product is unavailable', 400);
     }
-
-    if (payload.quantity > product.stock_quantity) {
-      throw new AppError(
-        `Insufficient stock. Available: ${product.stock_quantity}, requested: ${payload.quantity}`,
-        400
-      );
+    if (product.status !== 'Filled Tank') {
+      throw new AppError('Only filled tanks can be sold in an exchange transaction', 400);
     }
 
     const totalAmount = Number((payload.quantity * payload.unitPrice).toFixed(2));
     const paymentMethod = payload.paymentMethod || 'Fully Paid';
 
+    await productService.executeTankSwap(
+      {
+        filledProductId: payload.productId,
+        emptyBrand: payload.lpgTankVariant,
+        quantity: payload.quantity,
+      },
+      client
+    );
+
     const saleResult = await client.query(
       `INSERT INTO sales_records
-        (customer_id, product_id, status, sale_quantity, price_type, unit_price, total_amount)
-       VALUES ($1, $2, 'Active', $3, $4, $5, $6)
+        (customer_id, product_id, status, sale_quantity, price_type, unit_price, total_amount, lpg_tank_variant)
+       VALUES ($1, $2, 'Active', $3, $4, $5, $6, $7)
        RETURNING *`,
       [
         customer.customer_id,
@@ -166,6 +202,7 @@ export async function createSale(payload) {
         payload.priceType,
         payload.unitPrice,
         totalAmount,
+        payload.lpgTankVariant,
       ]
     );
 
@@ -181,8 +218,6 @@ export async function createSale(payload) {
       client
     );
 
-    await productService.adjustStock(payload.productId, -payload.quantity, client);
-
     await client.query('COMMIT');
     return getSaleById(saleId);
   } catch (err) {
@@ -194,6 +229,10 @@ export async function createSale(payload) {
 }
 
 export async function updateSale(saleId, payload) {
+  if (!payload.lpgTankVariant || !BRANDS.includes(payload.lpgTankVariant)) {
+    throw new AppError('Customer LPG tank brand is required', 400);
+  }
+
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -210,23 +249,36 @@ export async function updateSale(saleId, payload) {
       phoneNumber: payload.phoneNumber,
     });
 
-    const productChanged = payload.productId !== existing.product_id;
-    const qtyChanged = payload.quantity !== existing.sale_quantity;
+    const swapChanged =
+      payload.productId !== existing.product_id ||
+      payload.quantity !== existing.sale_quantity ||
+      payload.lpgTankVariant !== existing.lpg_tank_variant;
 
-    if (productChanged || qtyChanged) {
-      await productService.adjustStock(existing.product_id, existing.sale_quantity, client);
-
-      const newProduct = await productService.getProductById(payload.productId, client);
-      if (!newProduct) {
-        throw new AppError('Selected product is unavailable', 400);
-      }
-      if (payload.quantity > newProduct.stock_quantity) {
-        throw new AppError(
-          `Insufficient stock. Available: ${newProduct.stock_quantity}, requested: ${payload.quantity}`,
-          400
+    if (swapChanged) {
+      if (existing.lpg_tank_variant) {
+        await productService.reverseTankSwap(
+          {
+            filledProductId: existing.product_id,
+            emptyBrand: existing.lpg_tank_variant,
+            quantity: existing.sale_quantity,
+          },
+          client
         );
       }
-      await productService.adjustStock(payload.productId, -payload.quantity, client);
+
+      const newProduct = await productService.getProductById(payload.productId, client);
+      if (!newProduct || newProduct.status !== 'Filled Tank') {
+        throw new AppError('Selected product must be a filled tank', 400);
+      }
+
+      await productService.executeTankSwap(
+        {
+          filledProductId: payload.productId,
+          emptyBrand: payload.lpgTankVariant,
+          quantity: payload.quantity,
+        },
+        client
+      );
     }
 
     const totalAmount = Number((payload.quantity * payload.unitPrice).toFixed(2));
@@ -238,6 +290,7 @@ export async function updateSale(saleId, payload) {
            price_type = $4,
            unit_price = $5,
            total_amount = $6,
+           lpg_tank_variant = $7,
            date_updated = NOW()
        WHERE sale_id = $1`,
       [
@@ -247,6 +300,7 @@ export async function updateSale(saleId, payload) {
         payload.priceType,
         payload.unitPrice,
         totalAmount,
+        payload.lpgTankVariant,
       ]
     );
 
@@ -268,9 +322,20 @@ export async function deleteSale(saleId) {
     const existing = await getSaleById(saleId);
     if (!existing) throw new AppError('Sale not found', 404);
 
-    await productService.adjustStock(existing.product_id, existing.sale_quantity, client);
-    await creditService.deleteCreditHistoryForSale(saleId, client);
+    if (existing.lpg_tank_variant) {
+      await productService.reverseTankSwap(
+        {
+          filledProductId: existing.product_id,
+          emptyBrand: existing.lpg_tank_variant,
+          quantity: existing.sale_quantity,
+        },
+        client
+      );
+    } else {
+      await productService.adjustStock(existing.product_id, existing.sale_quantity, client);
+    }
 
+    await creditService.deleteCreditHistoryForSale(saleId, client);
     await client.query(`DELETE FROM sales_records WHERE sale_id = $1`, [saleId]);
 
     await client.query('COMMIT');
@@ -316,11 +381,187 @@ export async function getBrandSalesMetrics() {
   }));
 }
 
+export async function getSalesReport({ quickFilter = 'month', startDate, endDate } = {}) {
+  const { where, params } = buildReportDateFilter(quickFilter, startDate, endDate);
+  const baseFrom = `
+    FROM sales_records sr
+    JOIN lpg_products p ON p.product_id = sr.product_id
+    WHERE sr.status IN ('Active', 'Finished')
+    ${where}`;
+
+  const summaryResult = await query(
+    `SELECT
+       COALESCE(SUM(sr.total_amount), 0)::numeric AS total_gross_revenue,
+       COALESCE(SUM(p.wholesale_price * sr.sale_quantity), 0)::numeric AS total_product_cost,
+       COALESCE(SUM(p.weight_class * sr.sale_quantity), 0)::numeric AS total_volume_kg,
+       COUNT(*)::int AS total_orders
+     ${baseFrom}`,
+    params
+  );
+
+  const summary = summaryResult.rows[0];
+  const totalRevenue = Number(summary.total_gross_revenue);
+  const productCost = Number(summary.total_product_cost);
+  const totalOrders = summary.total_orders || 0;
+
+  const weightMixResult = await query(
+    `SELECT
+       p.weight_class,
+       COALESCE(SUM(sr.sale_quantity), 0)::int AS units_sold,
+       COALESCE(SUM(sr.total_amount), 0)::numeric AS revenue
+     ${baseFrom}
+     GROUP BY p.weight_class
+     ORDER BY p.weight_class ASC`,
+    params
+  );
+
+  const totalUnits = weightMixResult.rows.reduce((s, r) => s + r.units_sold, 0) || 1;
+
+  const revenueBreakdownResult = await query(
+    `SELECT
+       COALESCE(SUM(CASE WHEN p.status = 'Filled Tank' THEN sr.total_amount ELSE 0 END), 0)::numeric AS gas_refill_revenue,
+       COALESCE(SUM(CASE WHEN p.status = 'Empty Cylinder' THEN sr.total_amount ELSE 0 END), 0)::numeric AS new_cylinder_revenue
+     ${baseFrom}`,
+    params
+  );
+
+  const customerTypeResult = await query(
+    `SELECT
+       sr.price_type,
+       COUNT(*)::int AS order_count,
+       COALESCE(SUM(sr.total_amount), 0)::numeric AS revenue
+     ${baseFrom}
+     GROUP BY sr.price_type`,
+    params
+  );
+
+  const paymentResult = await query(
+    `SELECT
+       CASE
+         WHEN EXISTS (
+           SELECT 1 FROM credit_history ch
+           WHERE ch.sales_id = sr.sale_id AND ch.payment_option = 'Credit'
+         ) THEN 'Invoice / Credit'
+         ELSE 'Cash'
+       END AS payment_method,
+       COUNT(*)::int AS transaction_count,
+       COALESCE(SUM(sr.total_amount), 0)::numeric AS revenue
+     ${baseFrom}
+     GROUP BY 1`,
+    params
+  );
+
+  const mapSegments = (rows, totalRev, labelKey) =>
+    rows.map((row) => ({
+      label: row[labelKey],
+      orders: row.order_count ?? row.transaction_count ?? 0,
+      revenue: Number(row.revenue),
+      percentage: totalRev > 0 ? Number(((Number(row.revenue) / totalRev) * 100).toFixed(1)) : 0,
+    }));
+
+  const customerSegments = mapSegments(
+    customerTypeResult.rows.map((r) => ({
+      label: r.price_type === 'Wholesale' ? 'Commercial Wholesale' : 'Retail Residential',
+      order_count: r.order_count,
+      revenue: r.revenue,
+    })),
+    totalRevenue,
+    'label'
+  );
+
+  const paymentSegments = paymentResult.rows.map((row) => ({
+    label: row.payment_method,
+    orders: row.transaction_count,
+    revenue: Number(row.revenue),
+    percentage: totalRevenue > 0 ? Number(((Number(row.revenue) / totalRevenue) * 100).toFixed(1)) : 0,
+  }));
+
+  const revBreakdown = revenueBreakdownResult.rows[0];
+  const gasRefill = Number(revBreakdown.gas_refill_revenue);
+  const newCylinder = Number(revBreakdown.new_cylinder_revenue);
+  const revTotal = gasRefill + newCylinder || 1;
+
+  return {
+    summary: {
+      totalGrossRevenue: totalRevenue,
+      grossIncome: totalRevenue,
+      netIncome: Number((totalRevenue - productCost).toFixed(2)),
+      productCost,
+      totalVolumeKg: Number(summary.total_volume_kg),
+      totalOrders,
+      averageOrderValue: totalOrders > 0 ? Number((totalRevenue / totalOrders).toFixed(2)) : 0,
+      netIncomeFormula: 'Net Income = Total Sales Revenue − (Wholesale Price × Quantity)',
+    },
+    productMix: weightMixResult.rows.map((row) => ({
+      weightClass: Number(row.weight_class),
+      unitsSold: row.units_sold,
+      revenue: Number(row.revenue),
+      percentage: Number(((row.units_sold / totalUnits) * 100).toFixed(1)),
+    })),
+    revenueBreakdown: {
+      gasRefill: {
+        revenue: gasRefill,
+        percentage: Number(((gasRefill / revTotal) * 100).toFixed(1)),
+      },
+      newCylinder: {
+        revenue: newCylinder,
+        percentage: Number(((newCylinder / revTotal) * 100).toFixed(1)),
+      },
+    },
+    customerType: customerSegments,
+    fulfillmentMethod: [
+      {
+        label: 'Walk-in Pickup',
+        orders: totalOrders,
+        revenue: totalRevenue,
+        percentage: 100,
+      },
+      {
+        label: 'Delivery',
+        orders: 0,
+        revenue: 0,
+        percentage: 0,
+      },
+    ],
+    paymentMethod: paymentSegments,
+  };
+}
+
+export async function getDailyMetrics({ quickFilter = 'month', startDate, endDate } = {}) {
+  const { where, params } = buildReportDateFilter(quickFilter, startDate, endDate);
+  const baseFrom = `
+    FROM sales_records sr
+    JOIN lpg_products p ON p.product_id = sr.product_id
+    WHERE sr.status IN ('Active', 'Finished')
+    ${where}`;
+
+  const dailyResult = await query(
+    `SELECT
+       DATE(sr.date_created AT TIME ZONE 'UTC')::date AS date,
+       COUNT(*)::int AS orders,
+       COALESCE(SUM(sr.total_amount), 0)::numeric AS gross_income,
+       COALESCE(SUM(p.weight_class * sr.sale_quantity), 0)::numeric AS volume_kg,
+       COALESCE(SUM(p.wholesale_price * sr.sale_quantity), 0)::numeric AS product_cost
+     ${baseFrom}
+     GROUP BY DATE(sr.date_created AT TIME ZONE 'UTC')
+     ORDER BY DATE(sr.date_created AT TIME ZONE 'UTC') ASC`,
+    params
+  );
+
+  return dailyResult.rows.map(row => ({
+    date: row.date,
+    orders: row.orders,
+    grossIncome: Number(row.gross_income),
+    volumeKg: Number(row.volume_kg),
+    netIncome: Number((Number(row.gross_income) - Number(row.product_cost)).toFixed(2)),
+  }));
+}
+
 export async function getReportRows(period, startDate, endDate) {
   const { where, params } = buildDateFilter(period, startDate, endDate);
   const result = await query(
     `SELECT sr.sale_id, sr.date_created, sr.status, sr.sale_quantity, sr.price_type,
-            sr.unit_price, sr.total_amount,
+            sr.unit_price, sr.total_amount, sr.lpg_tank_variant,
             c.name AS customer_name, c.fb_name, c.phone_number,
             p.brand, p.weight_class, p.status AS product_status
      FROM sales_records sr

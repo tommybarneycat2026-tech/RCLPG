@@ -93,6 +93,15 @@ export const api = {
     request(`/products/${productId}`, { method: 'PUT', body: JSON.stringify(body) }),
   deleteProduct: (productId) => request(`/products/${productId}`, { method: 'DELETE' }),
   getWeeklySummary: () => request('/products/summary/weekly'),
+  getBrandOverview: () => request('/products/summary/brands'),
+  getSalesReport: (params = {}) => {
+    const qs = new URLSearchParams(params).toString();
+    return request(`/dashboard/sales-report${qs ? `?${qs}` : ''}`);
+  },
+  getDailyMetrics: (params = {}) => {
+    const qs = new URLSearchParams(params).toString();
+    return request(`/dashboard/daily-metrics${qs ? `?${qs}` : ''}`);
+  },
   getCustomers: (search = '') => request(`/customers?search=${encodeURIComponent(search)}`),
   getSales: (params = {}) => {
     const qs = new URLSearchParams(params).toString();
