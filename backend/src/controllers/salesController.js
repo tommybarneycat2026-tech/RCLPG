@@ -1,40 +1,54 @@
-import { body, param, query as q } from 'express-validator';
-import * as salesService from '../services/salesService.js';
-import { BRANDS, PRICE_TYPES, PAYMENT_METHODS } from '../utils/constants.js';
-import { asyncHandler } from '../middleware/errorHandler.js';
+import { body, param, query as q } from "express-validator";
+import * as salesService from "../services/salesService.js";
+import { PRICE_TYPES, PAYMENT_METHODS } from "../utils/constants.js";
+import { asyncHandler } from "../middleware/errorHandler.js";
 
 export const listSales = [
-  q('search').optional().isString(),
-  q('page').optional().isInt({ min: 1 }),
-  q('limit').optional().isInt({ min: 1, max: 100 }),
-  q('todayOnly').optional().isIn(['true', 'false']),
-  q('dateFilter').optional().isISO8601(),
-  q('customerName').optional().isString(),
-  q('productFilter').optional().isString(),
+  q("search").optional().isString(),
+  q("page").optional().isInt({ min: 1 }),
+  q("limit").optional().isInt({ min: 1, max: 100 }),
+  q("todayOnly").optional().isIn(["true", "false"]),
+  q("dateFilter").optional().isISO8601(),
+  q("customerName").optional().isString(),
+  q("productFilter").optional().isString(),
   asyncHandler(async (req, res) => {
     const result = await salesService.listSales({
-      search: req.query.search || '',
+      search: req.query.search || "",
       page: Number(req.query.page) || 1,
       limit: Number(req.query.limit) || 10,
-      todayOnly: req.query.todayOnly === 'true',
-      dateFilter: req.query.dateFilter || '',
-      customerName: req.query.customerName || '',
-      productFilter: req.query.productFilter || '',
+      todayOnly: req.query.todayOnly === "true",
+      dateFilter: req.query.dateFilter || "",
+      customerName: req.query.customerName || "",
+      productFilter: req.query.productFilter || "",
     });
     res.json({ success: true, ...result });
   }),
 ];
 
 export const createSale = [
-  body('productId').notEmpty().withMessage('Product is required'),
-  body('quantity').isInt({ min: 1 }).withMessage('Quantity must be at least 1'),
-  body('unitPrice').isFloat({ min: 0 }).withMessage('Unit price must be positive'),
-  body('priceType').isIn(PRICE_TYPES).withMessage('Invalid price type'),
-  body('paymentMethod').optional().isIn(PAYMENT_METHODS).withMessage('Invalid payment method'),
-  body('initialPayment').optional().isFloat({ min: 0 }).withMessage('Initial payment must be non-negative'),
-  body('lpgTankVariant').isIn(BRANDS).withMessage('Customer LPG tank brand is required'),
-  body('customerId').optional().isUUID(),
-  body('customerName').if(body('customerId').not().exists()).notEmpty().withMessage('Customer name is required'),
+  body("productId").notEmpty().withMessage("Product is required"),
+  body("quantity").isInt({ min: 1 }).withMessage("Quantity must be at least 1"),
+  body("unitPrice")
+    .isFloat({ min: 0 })
+    .withMessage("Unit price must be positive"),
+  body("priceType").isIn(PRICE_TYPES).withMessage("Invalid price type"),
+  body("paymentMethod")
+    .optional()
+    .isIn(PAYMENT_METHODS)
+    .withMessage("Invalid payment method"),
+  body("initialPayment")
+    .optional()
+    .isFloat({ min: 0 })
+    .withMessage("Initial payment must be non-negative"),
+  body("lpgTankVariant")
+    .trim()
+    .notEmpty()
+    .withMessage("Customer LPG tank brand is required"),
+  body("customerId").optional().isUUID(),
+  body("customerName")
+    .if(body("customerId").not().exists())
+    .notEmpty()
+    .withMessage("Customer name is required"),
   asyncHandler(async (req, res) => {
     const sale = await salesService.createSale({
       customerId: req.body.customerId,
@@ -45,7 +59,7 @@ export const createSale = [
       quantity: req.body.quantity,
       unitPrice: req.body.unitPrice,
       priceType: req.body.priceType,
-      paymentMethod: req.body.paymentMethod || 'Fully Paid',
+      paymentMethod: req.body.paymentMethod || "Fully Paid",
       initialPayment: req.body.initialPayment,
       lpgTankVariant: req.body.lpgTankVariant,
     });
@@ -54,13 +68,13 @@ export const createSale = [
 ];
 
 export const updateSale = [
-  param('saleId').isUUID(),
-  body('customerName').notEmpty(),
-  body('productId').notEmpty(),
-  body('quantity').isInt({ min: 1 }),
-  body('unitPrice').isFloat({ min: 0 }),
-  body('priceType').isIn(PRICE_TYPES),
-  body('lpgTankVariant').isIn(BRANDS),
+  param("saleId").isUUID(),
+  body("customerName").notEmpty(),
+  body("productId").notEmpty(),
+  body("quantity").isInt({ min: 1 }),
+  body("unitPrice").isFloat({ min: 0 }),
+  body("priceType").isIn(PRICE_TYPES),
+  body("lpgTankVariant").trim().notEmpty(),
   asyncHandler(async (req, res) => {
     const sale = await salesService.updateSale(req.params.saleId, {
       customerName: req.body.customerName,
@@ -77,7 +91,7 @@ export const updateSale = [
 ];
 
 export const deleteSale = [
-  param('saleId').isUUID(),
+  param("saleId").isUUID(),
   asyncHandler(async (req, res) => {
     const result = await salesService.deleteSale(req.params.saleId);
     res.json({ success: true, data: result });

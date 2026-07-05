@@ -6,6 +6,7 @@ export const SALE_STATUSES = ['Dropped', 'Active', 'Finished', 'Archived'];
 export const PRICE_TYPES = ['Regular Retail', 'Wholesale'];
 export const LOW_STOCK_THRESHOLD = 4;
 export const PAYMENT_METHODS = ['Fully Paid', 'Credit'];
+export const DEFAULT_EXPENSE_CATEGORIES = ['Truck Gas', 'Motor Gas', 'Foods', 'Gas Refill'];
 
 export function computeHealthIndicator(stockQuantity) {
   if (stockQuantity <= 0) return 'Out of Stock';

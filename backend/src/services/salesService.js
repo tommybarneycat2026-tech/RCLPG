@@ -1,75 +1,35 @@
-import pool, { query } from '../config/db.js';
-import { AppError } from '../middleware/errorHandler.js';
-import { BRANDS } from '../utils/constants.js';
-import * as productService from './productService.js';
-import * as customerService from './customerService.js';
-import * as creditService from './creditService.js';
-
-function buildReportDateFilter(quickFilter, startDate, endDate) {
-  const clauses = [];
-  const params = [];
-  let idx = 1;
-
-  if (quickFilter === 'today') {
-    clauses.push(`DATE(sr.date_created AT TIME ZONE 'UTC') = CURRENT_DATE`);
-  } else if (quickFilter === 'week') {
-    clauses.push(`sr.date_created >= DATE_TRUNC('week', CURRENT_DATE)`);
-  } else if (quickFilter === 'month') {
-    clauses.push(`sr.date_created >= DATE_TRUNC('month', CURRENT_DATE)`);
-  } else if (quickFilter === 'year') {
-    clauses.push(`sr.date_created >= DATE_TRUNC('year', CURRENT_DATE)`);
-  } else if (startDate && endDate) {
-    clauses.push(`DATE(sr.date_created) BETWEEN $${idx++} AND $${idx++}`);
-    params.push(startDate, endDate);
-  }
-
-  return {
-    where: clauses.length ? `AND ${clauses.join(' AND ')}` : '',
-    params,
-    nextIdx: idx,
-  };
-}
+import pool, { query } from "../config/db.js";
+import { AppError } from "../middleware/errorHandler.js";
+import { ensureBrand } from "./brandService.js";
+import {
+  buildReportDateFilter,
+  buildExportDateFilter,
+} from "../utils/dateFilters.js";
+import * as productService from "./productService.js";
+import * as customerService from "./customerService.js";
+import * as creditService from "./creditService.js";
+import * as expenseService from "./expenseService.js";
 
 function buildDateFilter(period, startDate, endDate) {
-  const clauses = [];
-  const params = [];
-  let idx = 1;
-
-  if (period === 'current_day') {
-    clauses.push(`DATE(sr.date_created AT TIME ZONE 'UTC') = CURRENT_DATE`);
-  } else if (period === 'daily' && startDate) {
-    clauses.push(`DATE(sr.date_created) = $${idx++}`);
-    params.push(startDate);
-  } else if (period === 'monthly' && startDate) {
-    clauses.push(`DATE_TRUNC('month', sr.date_created) = DATE_TRUNC('month', $${idx++}::date)`);
-    params.push(startDate);
-  } else if (period === 'yearly' && startDate) {
-    clauses.push(`DATE_TRUNC('year', sr.date_created) = DATE_TRUNC('year', $${idx++}::date)`);
-    params.push(startDate);
-  } else if (period === 'custom' && startDate && endDate) {
-    clauses.push(`DATE(sr.date_created) BETWEEN $${idx++} AND $${idx++}`);
-    params.push(startDate, endDate);
-  }
-
-  return { where: clauses.length ? `AND ${clauses.join(' AND ')}` : '', params, nextIdx: idx };
+  return buildExportDateFilter(period, startDate, endDate, "sr.date_created");
 }
 
 export async function listSales({
-  search = '',
+  search = "",
   page = 1,
   limit = 10,
   todayOnly = false,
   period,
   startDate,
   endDate,
-  customerName = '',
-  productFilter = '',
-  dateFilter = '',
+  customerName = "",
+  productFilter = "",
+  dateFilter = "",
 } = {}) {
   const offset = (page - 1) * limit;
   const statusFilter = "('Active', 'Finished')";
 
-  let dateClause = '';
+  let dateClause = "";
   const params = [search, `%${search}%`];
   let idx = 3;
 
@@ -85,13 +45,13 @@ export async function listSales({
     params.push(dateFilter);
   }
 
-  let customerClause = '';
+  let customerClause = "";
   if (customerName) {
     customerClause = `AND c.name ILIKE $${idx++}`;
     params.push(`%${customerName}%`);
   }
 
-  let productClause = '';
+  let productClause = "";
   if (productFilter) {
     productClause = `AND (p.brand ILIKE $${idx} OR CAST(p.weight_class AS text) ILIKE $${idx} OR p.status ILIKE $${idx})`;
     params.push(`%${productFilter}%`);
@@ -112,7 +72,7 @@ export async function listSales({
      JOIN customers c ON c.customer_id = sr.customer_id
      JOIN lpg_products p ON p.product_id = sr.product_id
      ${baseWhere}`,
-    params
+    params,
   );
 
   const dataResult = await query(
@@ -127,7 +87,7 @@ export async function listSales({
      ${baseWhere}
      ORDER BY sr.date_created DESC
      LIMIT $${idx} OFFSET $${idx + 1}`,
-    [...params, limit, offset]
+    [...params, limit, offset],
   );
 
   return {
@@ -149,19 +109,22 @@ export async function getSaleById(saleId) {
      JOIN customers c ON c.customer_id = sr.customer_id
      JOIN lpg_products p ON p.product_id = sr.product_id
      WHERE sr.sale_id = $1`,
-    [saleId]
+    [saleId],
   );
   return result.rows[0] || null;
 }
 
 export async function createSale(payload) {
-  if (!payload.lpgTankVariant || !BRANDS.includes(payload.lpgTankVariant)) {
-    throw new AppError('Customer LPG tank brand is required', 400);
+  if (!payload.lpgTankVariant) {
+    throw new AppError("Customer LPG tank brand is required", 400);
   }
+  // Recognize (and register, if new) the brand of the tank the customer
+  // brought in, so it appears consistently across brand selection UIs.
+  payload.lpgTankVariant = await ensureBrand(payload.lpgTankVariant);
 
   const client = await pool.connect();
   try {
-    await client.query('BEGIN');
+    await client.query("BEGIN");
 
     const customer = await customerService.findOrCreateCustomer({
       customerId: payload.customerId,
@@ -170,16 +133,24 @@ export async function createSale(payload) {
       phoneNumber: payload.phoneNumber,
     });
 
-    const product = await productService.getProductById(payload.productId, client);
+    const product = await productService.getProductById(
+      payload.productId,
+      client,
+    );
     if (!product) {
-      throw new AppError('Selected product is unavailable', 400);
+      throw new AppError("Selected product is unavailable", 400);
     }
-    if (product.status !== 'Filled Tank') {
-      throw new AppError('Only filled tanks can be sold in an exchange transaction', 400);
+    if (product.status !== "Filled Tank") {
+      throw new AppError(
+        "Only filled tanks can be sold in an exchange transaction",
+        400,
+      );
     }
 
-    const totalAmount = Number((payload.quantity * payload.unitPrice).toFixed(2));
-    const paymentMethod = payload.paymentMethod || 'Fully Paid';
+    const totalAmount = Number(
+      (payload.quantity * payload.unitPrice).toFixed(2),
+    );
+    const paymentMethod = payload.paymentMethod || "Fully Paid";
 
     await productService.executeTankSwap(
       {
@@ -187,7 +158,7 @@ export async function createSale(payload) {
         emptyBrand: payload.lpgTankVariant,
         quantity: payload.quantity,
       },
-      client
+      client,
     );
 
     const saleResult = await client.query(
@@ -203,7 +174,7 @@ export async function createSale(payload) {
         payload.unitPrice,
         totalAmount,
         payload.lpgTankVariant,
-      ]
+      ],
     );
 
     const saleId = saleResult.rows[0].sale_id;
@@ -215,13 +186,13 @@ export async function createSale(payload) {
         totalAmount,
         initialPayment: payload.initialPayment,
       },
-      client
+      client,
     );
 
-    await client.query('COMMIT');
+    await client.query("COMMIT");
     return getSaleById(saleId);
   } catch (err) {
-    await client.query('ROLLBACK');
+    await client.query("ROLLBACK");
     throw err;
   } finally {
     client.release();
@@ -229,18 +200,19 @@ export async function createSale(payload) {
 }
 
 export async function updateSale(saleId, payload) {
-  if (!payload.lpgTankVariant || !BRANDS.includes(payload.lpgTankVariant)) {
-    throw new AppError('Customer LPG tank brand is required', 400);
+  if (!payload.lpgTankVariant) {
+    throw new AppError("Customer LPG tank brand is required", 400);
   }
+  payload.lpgTankVariant = await ensureBrand(payload.lpgTankVariant);
 
   const client = await pool.connect();
   try {
-    await client.query('BEGIN');
+    await client.query("BEGIN");
 
     const existing = await getSaleById(saleId);
-    if (!existing) throw new AppError('Sale not found', 404);
-    if (['Archived', 'Dropped'].includes(existing.status)) {
-      throw new AppError('Cannot modify deleted sale', 400);
+    if (!existing) throw new AppError("Sale not found", 404);
+    if (["Archived", "Dropped"].includes(existing.status)) {
+      throw new AppError("Cannot modify deleted sale", 400);
     }
 
     await customerService.updateCustomer(existing.customer_id, {
@@ -262,13 +234,16 @@ export async function updateSale(saleId, payload) {
             emptyBrand: existing.lpg_tank_variant,
             quantity: existing.sale_quantity,
           },
-          client
+          client,
         );
       }
 
-      const newProduct = await productService.getProductById(payload.productId, client);
-      if (!newProduct || newProduct.status !== 'Filled Tank') {
-        throw new AppError('Selected product must be a filled tank', 400);
+      const newProduct = await productService.getProductById(
+        payload.productId,
+        client,
+      );
+      if (!newProduct || newProduct.status !== "Filled Tank") {
+        throw new AppError("Selected product must be a filled tank", 400);
       }
 
       await productService.executeTankSwap(
@@ -277,11 +252,13 @@ export async function updateSale(saleId, payload) {
           emptyBrand: payload.lpgTankVariant,
           quantity: payload.quantity,
         },
-        client
+        client,
       );
     }
 
-    const totalAmount = Number((payload.quantity * payload.unitPrice).toFixed(2));
+    const totalAmount = Number(
+      (payload.quantity * payload.unitPrice).toFixed(2),
+    );
 
     await client.query(
       `UPDATE sales_records
@@ -301,13 +278,13 @@ export async function updateSale(saleId, payload) {
         payload.unitPrice,
         totalAmount,
         payload.lpgTankVariant,
-      ]
+      ],
     );
 
-    await client.query('COMMIT');
+    await client.query("COMMIT");
     return getSaleById(saleId);
   } catch (err) {
-    await client.query('ROLLBACK');
+    await client.query("ROLLBACK");
     throw err;
   } finally {
     client.release();
@@ -317,10 +294,10 @@ export async function updateSale(saleId, payload) {
 export async function deleteSale(saleId) {
   const client = await pool.connect();
   try {
-    await client.query('BEGIN');
+    await client.query("BEGIN");
 
     const existing = await getSaleById(saleId);
-    if (!existing) throw new AppError('Sale not found', 404);
+    if (!existing) throw new AppError("Sale not found", 404);
 
     if (existing.lpg_tank_variant) {
       await productService.reverseTankSwap(
@@ -329,19 +306,25 @@ export async function deleteSale(saleId) {
           emptyBrand: existing.lpg_tank_variant,
           quantity: existing.sale_quantity,
         },
-        client
+        client,
       );
     } else {
-      await productService.adjustStock(existing.product_id, existing.sale_quantity, client);
+      await productService.adjustStock(
+        existing.product_id,
+        existing.sale_quantity,
+        client,
+      );
     }
 
     await creditService.deleteCreditHistoryForSale(saleId, client);
-    await client.query(`DELETE FROM sales_records WHERE sale_id = $1`, [saleId]);
+    await client.query(`DELETE FROM sales_records WHERE sale_id = $1`, [
+      saleId,
+    ]);
 
-    await client.query('COMMIT');
+    await client.query("COMMIT");
     return { saleId, deleted: true };
   } catch (err) {
-    await client.query('ROLLBACK');
+    await client.query("ROLLBACK");
     throw err;
   } finally {
     client.release();
@@ -354,7 +337,7 @@ export async function getDashboardSalesMetrics() {
        COALESCE(SUM(sale_quantity), 0)::int AS total_items_sold,
        COALESCE(SUM(total_amount), 0)::numeric AS total_revenue
      FROM sales_records
-     WHERE status IN ('Active', 'Finished')`
+     WHERE status IN ('Active', 'Finished')`,
   );
   return result.rows[0];
 }
@@ -368,7 +351,7 @@ export async function getBrandSalesMetrics() {
      JOIN lpg_products p ON p.product_id = sr.product_id
      WHERE sr.status IN ('Active', 'Finished')
      GROUP BY p.brand
-     ORDER BY total_items_sold DESC`
+     ORDER BY total_items_sold DESC`,
   );
 
   const rows = result.rows;
@@ -381,8 +364,17 @@ export async function getBrandSalesMetrics() {
   }));
 }
 
-export async function getSalesReport({ quickFilter = 'month', startDate, endDate } = {}) {
-  const { where, params } = buildReportDateFilter(quickFilter, startDate, endDate);
+export async function getSalesReport({
+  quickFilter = "month",
+  startDate,
+  endDate,
+} = {}) {
+  const { where, params } = buildReportDateFilter(
+    quickFilter,
+    startDate,
+    endDate,
+    "sr.date_created",
+  );
   const baseFrom = `
     FROM sales_records sr
     JOIN lpg_products p ON p.product_id = sr.product_id
@@ -392,17 +384,29 @@ export async function getSalesReport({ quickFilter = 'month', startDate, endDate
   const summaryResult = await query(
     `SELECT
        COALESCE(SUM(sr.total_amount), 0)::numeric AS total_gross_revenue,
-       COALESCE(SUM(p.wholesale_price * sr.sale_quantity), 0)::numeric AS total_product_cost,
+       COALESCE(SUM(p.initial_price * sr.sale_quantity), 0)::numeric AS total_cogs,
        COALESCE(SUM(p.weight_class * sr.sale_quantity), 0)::numeric AS total_volume_kg,
        COUNT(*)::int AS total_orders
      ${baseFrom}`,
-    params
+    params,
   );
 
   const summary = summaryResult.rows[0];
   const totalRevenue = Number(summary.total_gross_revenue);
-  const productCost = Number(summary.total_product_cost);
+  // Cost of Goods Sold (COGS): acquisition cost of every unit sold,
+  // sourced from lpg_products.initial_price.
+  const costOfGoodsSold = Number(summary.total_cogs);
   const totalOrders = summary.total_orders || 0;
+  const totalExpenses = await expenseService.getTotalExpenses({
+    quickFilter,
+    startDate,
+    endDate,
+  });
+  const grossIncome = totalRevenue;
+  // Net Income = Total Sales Revenue − Cost of Goods Sold − Total Expenses
+  const netIncome = Number(
+    (grossIncome - costOfGoodsSold - totalExpenses).toFixed(2),
+  );
 
   const weightMixResult = await query(
     `SELECT
@@ -412,17 +416,18 @@ export async function getSalesReport({ quickFilter = 'month', startDate, endDate
      ${baseFrom}
      GROUP BY p.weight_class
      ORDER BY p.weight_class ASC`,
-    params
+    params,
   );
 
-  const totalUnits = weightMixResult.rows.reduce((s, r) => s + r.units_sold, 0) || 1;
+  const totalUnits =
+    weightMixResult.rows.reduce((s, r) => s + r.units_sold, 0) || 1;
 
   const revenueBreakdownResult = await query(
     `SELECT
        COALESCE(SUM(CASE WHEN p.status = 'Filled Tank' THEN sr.total_amount ELSE 0 END), 0)::numeric AS gas_refill_revenue,
        COALESCE(SUM(CASE WHEN p.status = 'Empty Cylinder' THEN sr.total_amount ELSE 0 END), 0)::numeric AS new_cylinder_revenue
      ${baseFrom}`,
-    params
+    params,
   );
 
   const customerTypeResult = await query(
@@ -432,7 +437,7 @@ export async function getSalesReport({ quickFilter = 'month', startDate, endDate
        COALESCE(SUM(sr.total_amount), 0)::numeric AS revenue
      ${baseFrom}
      GROUP BY sr.price_type`,
-    params
+    params,
   );
 
   const paymentResult = await query(
@@ -448,7 +453,7 @@ export async function getSalesReport({ quickFilter = 'month', startDate, endDate
        COALESCE(SUM(sr.total_amount), 0)::numeric AS revenue
      ${baseFrom}
      GROUP BY 1`,
-    params
+    params,
   );
 
   const mapSegments = (rows, totalRev, labelKey) =>
@@ -456,24 +461,33 @@ export async function getSalesReport({ quickFilter = 'month', startDate, endDate
       label: row[labelKey],
       orders: row.order_count ?? row.transaction_count ?? 0,
       revenue: Number(row.revenue),
-      percentage: totalRev > 0 ? Number(((Number(row.revenue) / totalRev) * 100).toFixed(1)) : 0,
+      percentage:
+        totalRev > 0
+          ? Number(((Number(row.revenue) / totalRev) * 100).toFixed(1))
+          : 0,
     }));
 
   const customerSegments = mapSegments(
     customerTypeResult.rows.map((r) => ({
-      label: r.price_type === 'Wholesale' ? 'Commercial Wholesale' : 'Retail Residential',
+      label:
+        r.price_type === "Wholesale"
+          ? "Commercial Wholesale"
+          : "Retail Residential",
       order_count: r.order_count,
       revenue: r.revenue,
     })),
     totalRevenue,
-    'label'
+    "label",
   );
 
   const paymentSegments = paymentResult.rows.map((row) => ({
     label: row.payment_method,
     orders: row.transaction_count,
     revenue: Number(row.revenue),
-    percentage: totalRevenue > 0 ? Number(((Number(row.revenue) / totalRevenue) * 100).toFixed(1)) : 0,
+    percentage:
+      totalRevenue > 0
+        ? Number(((Number(row.revenue) / totalRevenue) * 100).toFixed(1))
+        : 0,
   }));
 
   const revBreakdown = revenueBreakdownResult.rows[0];
@@ -484,13 +498,16 @@ export async function getSalesReport({ quickFilter = 'month', startDate, endDate
   return {
     summary: {
       totalGrossRevenue: totalRevenue,
-      grossIncome: totalRevenue,
-      netIncome: Number((totalRevenue - productCost).toFixed(2)),
-      productCost,
+      grossIncome,
+      netIncome,
+      totalExpenses,
+      costOfGoodsSold,
       totalVolumeKg: Number(summary.total_volume_kg),
       totalOrders,
-      averageOrderValue: totalOrders > 0 ? Number((totalRevenue / totalOrders).toFixed(2)) : 0,
-      netIncomeFormula: 'Net Income = Total Sales Revenue − (Wholesale Price × Quantity)',
+      averageOrderValue:
+        totalOrders > 0 ? Number((totalRevenue / totalOrders).toFixed(2)) : 0,
+      netIncomeFormula:
+        "Net Income = Gross Income − Cost of Goods Sold − Total Expenses",
     },
     productMix: weightMixResult.rows.map((row) => ({
       weightClass: Number(row.weight_class),
@@ -511,13 +528,13 @@ export async function getSalesReport({ quickFilter = 'month', startDate, endDate
     customerType: customerSegments,
     fulfillmentMethod: [
       {
-        label: 'Walk-in Pickup',
+        label: "Walk-in Pickup",
         orders: totalOrders,
         revenue: totalRevenue,
         percentage: 100,
       },
       {
-        label: 'Delivery',
+        label: "Delivery",
         orders: 0,
         revenue: 0,
         percentage: 0,
@@ -527,8 +544,17 @@ export async function getSalesReport({ quickFilter = 'month', startDate, endDate
   };
 }
 
-export async function getDailyMetrics({ quickFilter = 'month', startDate, endDate } = {}) {
-  const { where, params } = buildReportDateFilter(quickFilter, startDate, endDate);
+export async function getDailyMetrics({
+  quickFilter = "month",
+  startDate,
+  endDate,
+} = {}) {
+  const { where, params } = buildReportDateFilter(
+    quickFilter,
+    startDate,
+    endDate,
+    "sr.date_created",
+  );
   const baseFrom = `
     FROM sales_records sr
     JOIN lpg_products p ON p.product_id = sr.product_id
@@ -540,21 +566,39 @@ export async function getDailyMetrics({ quickFilter = 'month', startDate, endDat
        DATE(sr.date_created AT TIME ZONE 'UTC')::date AS date,
        COUNT(*)::int AS orders,
        COALESCE(SUM(sr.total_amount), 0)::numeric AS gross_income,
-       COALESCE(SUM(p.weight_class * sr.sale_quantity), 0)::numeric AS volume_kg,
-       COALESCE(SUM(p.wholesale_price * sr.sale_quantity), 0)::numeric AS product_cost
+       COALESCE(SUM(p.initial_price * sr.sale_quantity), 0)::numeric AS cogs,
+       COALESCE(SUM(p.weight_class * sr.sale_quantity), 0)::numeric AS volume_kg
      ${baseFrom}
      GROUP BY DATE(sr.date_created AT TIME ZONE 'UTC')
      ORDER BY DATE(sr.date_created AT TIME ZONE 'UTC') ASC`,
-    params
+    params,
   );
 
-  return dailyResult.rows.map(row => ({
-    date: row.date,
-    orders: row.orders,
-    grossIncome: Number(row.gross_income),
-    volumeKg: Number(row.volume_kg),
-    netIncome: Number((Number(row.gross_income) - Number(row.product_cost)).toFixed(2)),
-  }));
+  const expenseByDate = await expenseService.getDailyExpenseTotals({
+    quickFilter,
+    startDate,
+    endDate,
+  });
+  const expenseMap = new Map(
+    expenseByDate.map((row) => [String(row.date), row.totalExpenses]),
+  );
+
+  return dailyResult.rows.map((row) => {
+    const grossIncome = Number(row.gross_income);
+    const costOfGoodsSold = Number(row.cogs);
+    const dailyExpenses = expenseMap.get(String(row.date)) || 0;
+    return {
+      date: row.date,
+      orders: row.orders,
+      grossIncome,
+      costOfGoodsSold,
+      volumeKg: Number(row.volume_kg),
+      totalExpenses: dailyExpenses,
+      netIncome: Number(
+        (grossIncome - costOfGoodsSold - dailyExpenses).toFixed(2),
+      ),
+    };
+  });
 }
 
 export async function getReportRows(period, startDate, endDate) {
@@ -570,7 +614,138 @@ export async function getReportRows(period, startDate, endDate) {
      WHERE sr.status IN ('Active', 'Finished', 'Dropped', 'Archived')
        ${where}
      ORDER BY sr.date_created DESC`,
-    params
+    params,
   );
   return result.rows;
+}
+
+function normalizeExportPeriod(period) {
+  if (period === "today") return "current_day";
+  return period;
+}
+
+export async function getSalesReportAnalytics(period, startDate, endDate) {
+  const exportPeriod = normalizeExportPeriod(period);
+  const { where, params } = buildDateFilter(exportPeriod, startDate, endDate);
+  const baseFrom = `
+    FROM sales_records sr
+    JOIN lpg_products p ON p.product_id = sr.product_id
+    WHERE sr.status IN ('Active', 'Finished')
+    ${where}`;
+
+  const summaryResult = await query(
+    `SELECT
+       COALESCE(SUM(sr.total_amount), 0)::numeric AS total_gross_revenue,
+       COALESCE(SUM(p.initial_price * sr.sale_quantity), 0)::numeric AS total_cogs,
+       COALESCE(SUM(p.weight_class * sr.sale_quantity), 0)::numeric AS total_volume_kg,
+       COUNT(*)::int AS total_orders
+     ${baseFrom}`,
+    params,
+  );
+
+  const summary = summaryResult.rows[0];
+  const grossIncome = Number(summary.total_gross_revenue);
+  const costOfGoodsSold = Number(summary.total_cogs);
+  const totalOrders = summary.total_orders || 0;
+  const totalVolumeKg = Number(summary.total_volume_kg);
+  const totalExpenses = await expenseService.getTotalExpensesForExport(
+    exportPeriod,
+    startDate,
+    endDate,
+  );
+  // Net Income = Total Sales Revenue − Cost of Goods Sold − Total Expenses
+  const netIncome = Number(
+    (grossIncome - costOfGoodsSold - totalExpenses).toFixed(2),
+  );
+
+  const dailySalesResult = await query(
+    `SELECT
+       DATE(sr.date_created AT TIME ZONE 'UTC')::date AS date,
+       COUNT(*)::int AS orders,
+       COALESCE(SUM(sr.total_amount), 0)::numeric AS gross_income,
+       COALESCE(SUM(p.initial_price * sr.sale_quantity), 0)::numeric AS cogs,
+       COALESCE(SUM(p.weight_class * sr.sale_quantity), 0)::numeric AS volume_kg
+     ${baseFrom}
+     GROUP BY DATE(sr.date_created AT TIME ZONE 'UTC')
+     ORDER BY DATE(sr.date_created AT TIME ZONE 'UTC') ASC`,
+    params,
+  );
+
+  const expenseByDate = await expenseService.getDailyExpenseTotalsForExport(
+    exportPeriod,
+    startDate,
+    endDate,
+  );
+  const expenseMap = new Map(
+    expenseByDate.map((row) => [String(row.date), row.totalExpenses]),
+  );
+
+  const dailyMetrics = dailySalesResult.rows.map((row) => {
+    const dayGross = Number(row.gross_income);
+    const dayCogs = Number(row.cogs);
+    const dayExpenses = expenseMap.get(String(row.date)) || 0;
+    return {
+      date: row.date,
+      orders: row.orders,
+      grossIncome: dayGross,
+      volumeKg: Number(row.volume_kg),
+      totalExpenses: dayExpenses,
+      netIncome: Number((dayGross - dayCogs - dayExpenses).toFixed(2)),
+    };
+  });
+
+  expenseByDate.forEach(({ date, totalExpenses: dayExpenses }) => {
+    const key = String(date);
+    if (!dailyMetrics.find((d) => String(d.date) === key)) {
+      dailyMetrics.push({
+        date,
+        orders: 0,
+        grossIncome: 0,
+        volumeKg: 0,
+        totalExpenses: dayExpenses,
+        netIncome: Number((-dayExpenses).toFixed(2)),
+      });
+    }
+  });
+
+  dailyMetrics.sort((a, b) => new Date(a.date) - new Date(b.date));
+
+  const brandResult = await query(
+    `SELECT
+       p.brand,
+       COALESCE(SUM(sr.sale_quantity), 0)::int AS units_sold
+     ${baseFrom}
+     GROUP BY p.brand
+     ORDER BY units_sold DESC`,
+    params,
+  );
+
+  const customerTypeResult = await query(
+    `SELECT
+       CASE WHEN sr.price_type = 'Wholesale' THEN 'Commercial' ELSE 'Retail' END AS customer_type,
+       COUNT(*)::int AS order_count
+     ${baseFrom}
+     GROUP BY 1`,
+    params,
+  );
+
+  return {
+    summary: {
+      grossIncome,
+      netIncome,
+      totalExpenses,
+      costOfGoodsSold,
+      totalVolumeKg,
+      totalOrders,
+    },
+    dailyMetrics,
+    productsByBrand: brandResult.rows.map((row) => ({
+      brand: row.brand,
+      unitsSold: row.units_sold,
+    })),
+    customerType: customerTypeResult.rows.map((row) => ({
+      label: row.customer_type,
+      orders: row.order_count,
+    })),
+  };
 }
