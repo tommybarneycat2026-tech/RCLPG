@@ -6,8 +6,8 @@ import { useToast } from "../context/ToastContext";
 function productOptionLabel(product) {
   const statusShort = product.status === "Filled Tank" ? "Filled" : "Empty";
   let prefix = "";
-  if (product.stock_quantity === 0) prefix = "!! OUT !! ";
-  else if (product.health_indicator === "Low Stock") prefix = "[LOW] ";
+  if (product.stock_quantity === 0) prefix = "OUT OF STOCK! ";
+  else if (product.health_indicator === "Low Stock") prefix = "LOW ON STOCK! ";
   return `${prefix}(${product.weight_class}kg [${statusShort}] - Stock: ${product.stock_quantity})`;
 }
 
@@ -45,6 +45,20 @@ export default function SaleForm({
     initialValues?.initialPayment ?? "",
   );
   const [brand, setBrand] = useState(initialValues?.brand || brands[0] || "");
+  // "Filled" toggles whether we're selling a Filled Tank (exchange sale,
+  // requires a Customer LPG trade-in) or an Empty Cylinder (direct sale,
+  // no trade-in). Defaults to checked/Filled.
+  const [filled, setFilled] = useState(
+    initialValues?.filled !== undefined ? initialValues.filled : true,
+  );
+  // "Purchase Tank" means the customer is buying the tank outright (no
+  // trade-in), even if the product being sold is a Filled Tank. Defaults
+  // to unchecked.
+  const [purchaseTank, setPurchaseTank] = useState(
+    initialValues?.purchaseTank !== undefined
+      ? initialValues.purchaseTank
+      : false,
+  );
   const [productId, setProductId] = useState(initialValues?.productId || "");
   const [quantity, setQuantity] = useState(initialValues?.quantity || 1);
   const [unitPrice, setUnitPrice] = useState(initialValues?.unitPrice || 0);
@@ -52,15 +66,21 @@ export default function SaleForm({
     initialValues?.lpgTankVariant || brands[0] || "Regasco",
   );
 
-  const filledProducts = useMemo(
-    () => products.filter((p) => p.status === "Filled Tank"),
-    [products],
-  );
+  // Customer LPG only makes sense for an exchange (trade-in) sale: the
+  // product sold must be Filled and the customer must not be purchasing
+  // the tank outright.
+  const lpgEnabled = filled && !purchaseTank;
 
-  const filteredProducts = useMemo(
-    () => filledProducts.filter((p) => p.brand === brand),
-    [filledProducts, brand],
-  );
+  // Product list reacts to both Brand and the Filled checkbox: Filled shows
+  // Filled Tank inventory for the brand, unchecked shows Empty Cylinder
+  // inventory for the same brand. Purchase Tank does not affect which
+  // products are listed, only whether Customer LPG applies.
+  const filteredProducts = useMemo(() => {
+    const targetStatus = filled ? "Filled Tank" : "Empty Cylinder";
+    return products.filter(
+      (p) => p.status === targetStatus && p.brand === brand,
+    );
+  }, [products, brand, filled]);
 
   // Searchable customer list: dedupe by name (case-insensitive) so
   // customers with multiple historical records only appear once, sorted
@@ -136,7 +156,11 @@ export default function SaleForm({
       productId,
       quantity: Number(quantity),
       unitPrice: Number(unitPrice),
-      lpgTankVariant,
+      // Only relevant for exchange sales (Filled + not a tank purchase).
+      // Direct sales (Empty Cylinder, or a Filled Tank purchased outright)
+      // have no trade-in, so this is omitted entirely.
+      lpgTankVariant: lpgEnabled ? lpgTankVariant : undefined,
+      purchaseTank,
     });
   };
 
@@ -312,7 +336,7 @@ export default function SaleForm({
               htmlFor="brand"
               className="block text-xs font-bold uppercase text-slate-500 mb-1"
             >
-              Brand (Filled Tank Sold)
+              Brand ({filled ? "Filled Tank" : "Empty Cylinder"} Sold)
             </label>
             <select
               id="brand"
@@ -326,6 +350,14 @@ export default function SaleForm({
                 </option>
               ))}
             </select>
+            <label className="inline-flex items-center gap-2 mt-2 text-xs font-semibold text-slate-600">
+              <input
+                type="checkbox"
+                checked={filled}
+                onChange={(e) => setFilled(e.target.checked)}
+              />
+              Filled
+            </label>
           </div>
           <div>
             <label
@@ -392,8 +424,9 @@ export default function SaleForm({
             Customer LPG Tank
           </legend>
           <p className="text-[11px] text-slate-500">
-            Brand of the empty cylinder returned by the customer (same weight as
-            filled tank sold)
+            {filled
+              ? "Brand of the empty cylinder returned by the customer (same weight as filled tank sold)"
+              : "Not applicable — this is a direct sale of an empty cylinder with no trade-in."}
           </p>
           <div>
             <label
@@ -402,19 +435,30 @@ export default function SaleForm({
             >
               Customer LPG
             </label>
-            <select
-              id="customer-lpg"
-              value={lpgTankVariant}
-              onChange={(e) => setLpgTankVariant(e.target.value)}
-              required
-              className="w-full text-sm py-3 px-4 border border-slate-200 bg-white rounded-xl"
-            >
-              {brands.map((b) => (
-                <option key={b} value={b}>
-                  {b}
-                </option>
-              ))}
-            </select>
+            {filled ? (
+              <select
+                id="customer-lpg"
+                value={lpgTankVariant}
+                onChange={(e) => setLpgTankVariant(e.target.value)}
+                required
+                className="w-full text-sm py-3 px-4 border border-slate-200 bg-white rounded-xl"
+              >
+                {brands.map((b) => (
+                  <option key={b} value={b}>
+                    {b}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <input
+                id="customer-lpg"
+                type="text"
+                value="N/A"
+                disabled
+                readOnly
+                className="w-full text-sm py-3 px-4 border border-slate-200 bg-slate-100 text-slate-400 rounded-xl cursor-not-allowed"
+              />
+            )}
           </div>
         </fieldset>
 

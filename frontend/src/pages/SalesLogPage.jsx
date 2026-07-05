@@ -231,10 +231,11 @@ export default function SalesLogPage() {
               phoneNumber: selectedSale.phone_number,
               priceType: selectedSale.price_type,
               brand: selectedSale.brand,
+              filled: selectedSale.product_status === "Filled Tank",
               productId: selectedSale.product_id,
               quantity: selectedSale.sale_quantity,
               unitPrice: selectedSale.unit_price,
-              lpgTankVariant: selectedSale.lpg_tank_variant || "Regasco",
+              lpgTankVariant: selectedSale.lpg_tank_variant || "",
             }}
             submitLabel={saving ? "Saving..." : "Commit Entry Correction"}
             onSubmit={handleOverride}

@@ -114,14 +114,74 @@ export async function getSaleById(saleId) {
   return result.rows[0] || null;
 }
 
-export async function createSale(payload) {
-  if (!payload.lpgTankVariant) {
-    throw new AppError("Customer LPG tank brand is required", 400);
+// Applies the inventory effect of a sale for the given product/quantity and
+// returns the lpg_tank_variant that should be stored on the sales record.
+//
+// - Filled Tank products are sold as an exchange: the customer must trade
+//   in an empty cylinder (lpgTankVariant), which is swapped into stock.
+// - Empty Cylinder products are sold directly (e.g. a brand-new/standalone
+//   cylinder) with no trade-in swap, so lpgTankVariant does not apply and
+//   the resolved variant is null.
+async function applySaleStockEffect(
+  { productId, quantity, lpgTankVariant },
+  client,
+) {
+  const product = await productService.getProductById(productId, client);
+  if (!product) {
+    throw new AppError("Selected product is unavailable", 400);
   }
-  // Recognize (and register, if new) the brand of the tank the customer
-  // brought in, so it appears consistently across brand selection UIs.
-  payload.lpgTankVariant = await ensureBrand(payload.lpgTankVariant);
 
+  if (product.status === "Filled Tank") {
+    if (!lpgTankVariant) {
+      throw new AppError("Customer LPG tank brand is required", 400);
+    }
+    // Recognize (and register, if new) the brand of the tank the customer
+    // brought in, so it appears consistently across brand selection UIs.
+    const resolvedVariant = await ensureBrand(lpgTankVariant);
+    await productService.executeTankSwap(
+      { filledProductId: productId, emptyBrand: resolvedVariant, quantity },
+      client,
+    );
+    return resolvedVariant;
+  }
+
+  if (product.status === "Empty Cylinder") {
+    if (quantity > product.stock_quantity) {
+      throw new AppError(
+        `Insufficient stock. Available: ${product.stock_quantity}, requested: ${quantity}`,
+        400,
+      );
+    }
+    await productService.adjustStock(productId, -quantity, client);
+    return null;
+  }
+
+  throw new AppError("Selected product has an invalid status", 400);
+}
+
+// Reverses whatever inventory effect a previously-saved sale had, using the
+// same rule deleteSale already relied on: a swap sale restores via
+// reverseTankSwap, a direct sale simply restores the deducted stock.
+async function reverseSaleStockEffect(existingSale, client) {
+  if (existingSale.lpg_tank_variant) {
+    await productService.reverseTankSwap(
+      {
+        filledProductId: existingSale.product_id,
+        emptyBrand: existingSale.lpg_tank_variant,
+        quantity: existingSale.sale_quantity,
+      },
+      client,
+    );
+  } else {
+    await productService.adjustStock(
+      existingSale.product_id,
+      existingSale.sale_quantity,
+      client,
+    );
+  }
+}
+
+export async function createSale(payload) {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
@@ -133,30 +193,16 @@ export async function createSale(payload) {
       phoneNumber: payload.phoneNumber,
     });
 
-    const product = await productService.getProductById(
-      payload.productId,
-      client,
-    );
-    if (!product) {
-      throw new AppError("Selected product is unavailable", 400);
-    }
-    if (product.status !== "Filled Tank") {
-      throw new AppError(
-        "Only filled tanks can be sold in an exchange transaction",
-        400,
-      );
-    }
-
     const totalAmount = Number(
       (payload.quantity * payload.unitPrice).toFixed(2),
     );
     const paymentMethod = payload.paymentMethod || "Fully Paid";
 
-    await productService.executeTankSwap(
+    const lpgTankVariant = await applySaleStockEffect(
       {
-        filledProductId: payload.productId,
-        emptyBrand: payload.lpgTankVariant,
+        productId: payload.productId,
         quantity: payload.quantity,
+        lpgTankVariant: payload.lpgTankVariant,
       },
       client,
     );
@@ -173,7 +219,7 @@ export async function createSale(payload) {
         payload.priceType,
         payload.unitPrice,
         totalAmount,
-        payload.lpgTankVariant,
+        lpgTankVariant,
       ],
     );
 
@@ -200,11 +246,6 @@ export async function createSale(payload) {
 }
 
 export async function updateSale(saleId, payload) {
-  if (!payload.lpgTankVariant) {
-    throw new AppError("Customer LPG tank brand is required", 400);
-  }
-  payload.lpgTankVariant = await ensureBrand(payload.lpgTankVariant);
-
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
@@ -221,36 +262,20 @@ export async function updateSale(saleId, payload) {
       phoneNumber: payload.phoneNumber,
     });
 
-    const swapChanged =
+    const stockEffectChanged =
       payload.productId !== existing.product_id ||
       payload.quantity !== existing.sale_quantity ||
-      payload.lpgTankVariant !== existing.lpg_tank_variant;
+      (payload.lpgTankVariant || null) !== (existing.lpg_tank_variant || null);
 
-    if (swapChanged) {
-      if (existing.lpg_tank_variant) {
-        await productService.reverseTankSwap(
-          {
-            filledProductId: existing.product_id,
-            emptyBrand: existing.lpg_tank_variant,
-            quantity: existing.sale_quantity,
-          },
-          client,
-        );
-      }
+    let lpgTankVariant = existing.lpg_tank_variant;
 
-      const newProduct = await productService.getProductById(
-        payload.productId,
-        client,
-      );
-      if (!newProduct || newProduct.status !== "Filled Tank") {
-        throw new AppError("Selected product must be a filled tank", 400);
-      }
-
-      await productService.executeTankSwap(
+    if (stockEffectChanged) {
+      await reverseSaleStockEffect(existing, client);
+      lpgTankVariant = await applySaleStockEffect(
         {
-          filledProductId: payload.productId,
-          emptyBrand: payload.lpgTankVariant,
+          productId: payload.productId,
           quantity: payload.quantity,
+          lpgTankVariant: payload.lpgTankVariant,
         },
         client,
       );
@@ -277,7 +302,7 @@ export async function updateSale(saleId, payload) {
         payload.priceType,
         payload.unitPrice,
         totalAmount,
-        payload.lpgTankVariant,
+        lpgTankVariant,
       ],
     );
 
@@ -299,22 +324,7 @@ export async function deleteSale(saleId) {
     const existing = await getSaleById(saleId);
     if (!existing) throw new AppError("Sale not found", 404);
 
-    if (existing.lpg_tank_variant) {
-      await productService.reverseTankSwap(
-        {
-          filledProductId: existing.product_id,
-          emptyBrand: existing.lpg_tank_variant,
-          quantity: existing.sale_quantity,
-        },
-        client,
-      );
-    } else {
-      await productService.adjustStock(
-        existing.product_id,
-        existing.sale_quantity,
-        client,
-      );
-    }
+    await reverseSaleStockEffect(existing, client);
 
     await creditService.deleteCreditHistoryForSale(saleId, client);
     await client.query(`DELETE FROM sales_records WHERE sale_id = $1`, [

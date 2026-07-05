@@ -40,10 +40,10 @@ export const createSale = [
     .optional()
     .isFloat({ min: 0 })
     .withMessage("Initial payment must be non-negative"),
-  body("lpgTankVariant")
-    .trim()
-    .notEmpty()
-    .withMessage("Customer LPG tank brand is required"),
+  // Only required when the selected product is a Filled Tank (exchange
+  // sale). Empty Cylinder products are sold directly with no trade-in, so
+  // this is validated conditionally inside salesService instead.
+  body("lpgTankVariant").optional({ values: "falsy" }).trim().isString(),
   body("customerId").optional().isUUID(),
   body("customerName")
     .if(body("customerId").not().exists())
@@ -74,7 +74,7 @@ export const updateSale = [
   body("quantity").isInt({ min: 1 }),
   body("unitPrice").isFloat({ min: 0 }),
   body("priceType").isIn(PRICE_TYPES),
-  body("lpgTankVariant").trim().notEmpty(),
+  body("lpgTankVariant").optional({ values: "falsy" }).trim().isString(),
   asyncHandler(async (req, res) => {
     const sale = await salesService.updateSale(req.params.saleId, {
       customerName: req.body.customerName,
