@@ -342,7 +342,20 @@ export async function getDashboardSalesMetrics() {
   return result.rows[0];
 }
 
-export async function getBrandSalesMetrics() {
+// Brand-level sold-units distribution. Accepts the same quickFilter/date
+// range as getSalesReport so it responds to the report's active filter
+// instead of always reflecting all-time totals.
+export async function getBrandSalesMetrics({
+  quickFilter = "month",
+  startDate,
+  endDate,
+} = {}) {
+  const { where, params } = buildReportDateFilter(
+    quickFilter,
+    startDate,
+    endDate,
+    "sr.date_created",
+  );
   const result = await query(
     `SELECT
        p.brand,
@@ -350,8 +363,10 @@ export async function getBrandSalesMetrics() {
      FROM sales_records sr
      JOIN lpg_products p ON p.product_id = sr.product_id
      WHERE sr.status IN ('Active', 'Finished')
+     ${where}
      GROUP BY p.brand
      ORDER BY total_items_sold DESC`,
+    params,
   );
 
   const rows = result.rows;
@@ -495,7 +510,14 @@ export async function getSalesReport({
   const newCylinder = Number(revBreakdown.new_cylinder_revenue);
   const revTotal = gasRefill + newCylinder || 1;
 
+  const brandMetrics = await getBrandSalesMetrics({
+    quickFilter,
+    startDate,
+    endDate,
+  });
+
   return {
+    brandMetrics,
     summary: {
       totalGrossRevenue: totalRevenue,
       grossIncome,

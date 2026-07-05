@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, formatCurrency } from "../api/client";
 import { useToast } from "../context/ToastContext";
+import { useAuth } from "../context/AuthContext";
 import LoadingSpinner from "../components/LoadingSpinner";
 import SaleForm from "../components/SaleForm";
 import RecordSaleModal from "../components/RecordSaleModal";
@@ -10,6 +11,7 @@ import Modal from "../components/Modal";
 
 export default function SalesLogPage() {
   const { showToast } = useToast();
+  const { isAdministrator } = useAuth();
   const [sales, setSales] = useState([]);
   const [products, setProducts] = useState([]);
   const [customers, setCustomers] = useState([]);
@@ -97,25 +99,36 @@ export default function SalesLogPage() {
           <h2 className="text-lg font-bold text-slate-900">
             Customer & Sales Log
           </h2>
-          <button
-            type="button"
-            onClick={() => setDownloadModalOpen(true)}
-            className="bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs px-5 py-2.5 rounded-xl"
-          >
-            Download Sales Log
-          </button>
+          {isAdministrator && (
+            <button
+              type="button"
+              onClick={() => setDownloadModalOpen(true)}
+              className="bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs px-5 py-2.5 rounded-xl"
+            >
+              Download Sales Log
+            </button>
+          )}
         </div>
 
         <div className="flex flex-col lg:flex-row lg:items-end gap-3">
-          <div className="flex flex-wrap gap-2 shrink-0">
-            <button
-              type="button"
-              onClick={() => setSaleModalOpen(true)}
-              className="bg-red-600 hover:bg-red-700 text-white font-bold text-xs px-5 py-2.5 rounded-xl"
-            >
-              Record Sale
-            </button>
-          </div>
+          {isAdministrator && (
+            <div className="flex flex-wrap gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => setExpenseModalOpen(true)}
+                className="bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs px-5 py-2.5 rounded-xl"
+              >
+                Add Expenses
+              </button>
+              <button
+                type="button"
+                onClick={() => setSaleModalOpen(true)}
+                className="bg-red-600 hover:bg-red-700 text-white font-bold text-xs px-5 py-2.5 rounded-xl"
+              >
+                Record Sale
+              </button>
+            </div>
+          )}
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 flex-1">
             <div>
@@ -185,7 +198,7 @@ export default function SalesLogPage() {
         </div>
       </div>
 
-      {selectedSale && (
+      {isAdministrator && selectedSale && (
         <div className="bg-red-50/50 p-5 rounded-xl border-2 border-red-200 shadow-inner space-y-4">
           <div className="border-b border-slate-200 pb-2 flex justify-between items-center">
             <div>
@@ -236,12 +249,12 @@ export default function SalesLogPage() {
               <th className="p-3">Log Date</th>
               <th className="p-3">Customer Name</th>
               <th className="p-3">Price Type</th>
-              <th className="p-3">Product Specification</th>
-              <th className="p-3">Customer LPG Tank</th>
+              <th className="p-3">Product Brought</th>
+              <th className="p-3">Brand Traded</th>
               <th className="p-3 text-center">Qty</th>
               <th className="p-3 text-right">Unit Price</th>
               <th className="p-3 text-right">Total Billing</th>
-              <th className="p-3 text-center">Actions</th>
+              {isAdministrator && <th className="p-3 text-center">Actions</th>}
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 font-medium text-slate-600">
@@ -278,27 +291,32 @@ export default function SalesLogPage() {
                 <td className="p-3 text-right text-red-600 font-extrabold">
                   {formatCurrency(sale.total_amount)}
                 </td>
-                <td className="p-3 text-center space-x-1">
-                  <button
-                    type="button"
-                    onClick={() => setSelectedSaleId(sale.sale_id)}
-                    className="text-xs font-bold bg-slate-100 hover:bg-slate-800 hover:text-white px-2 py-1 rounded-lg"
-                  >
-                    Override
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setDeleteTarget(sale)}
-                    className="text-xs font-bold bg-red-50 text-red-600 hover:bg-red-600 hover:text-white px-2 py-1 rounded-lg"
-                  >
-                    Delete
-                  </button>
-                </td>
+                {isAdministrator && (
+                  <td className="p-3 text-center space-x-1">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedSaleId(sale.sale_id)}
+                      className="text-xs font-bold bg-slate-100 hover:bg-slate-800 hover:text-white px-2 py-1 rounded-lg"
+                    >
+                      Override
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDeleteTarget(sale)}
+                      className="text-xs font-bold bg-red-50 text-red-600 hover:bg-red-600 hover:text-white px-2 py-1 rounded-lg"
+                    >
+                      Delete
+                    </button>
+                  </td>
+                )}
               </tr>
             ))}
             {sales.length === 0 && (
               <tr>
-                <td colSpan={11} className="text-center py-8 text-slate-400">
+                <td
+                  colSpan={isAdministrator ? 9 : 8}
+                  className="text-center py-8 text-slate-400"
+                >
                   No transactions found.
                 </td>
               </tr>
@@ -307,7 +325,7 @@ export default function SalesLogPage() {
         </table>
       </div>
 
-      {deleteTarget && (
+      {isAdministrator && deleteTarget && (
         <Modal
           title="Delete Sale"
           onClose={() => setDeleteTarget(null)}

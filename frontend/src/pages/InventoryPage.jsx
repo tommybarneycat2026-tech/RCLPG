@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, formatCurrency } from "../api/client";
 import { useToast } from "../context/ToastContext";
+import { useAuth } from "../context/AuthContext";
 import LoadingSpinner from "../components/LoadingSpinner";
 import Modal from "../components/Modal";
 import BrandAutocomplete from "../components/BrandAutocomplete";
+import BrandInventoryOverview from "../components/BrandInventoryOverview";
 
 const FALLBACK_BRANDS = ["Regasco", "Seagas", "Pryce"];
 const WEIGHTS = [2.7, 5, 11, 22, 50];
@@ -25,7 +27,7 @@ function healthBadgeClass(indicator) {
   return "bg-emerald-50 text-emerald-700";
 }
 
-function InventoryTable({ products, onEdit, onDelete }) {
+function InventoryTable({ products, onEdit, onDelete, isAdmin }) {
   if (!products.length) {
     return (
       <p className="text-xs text-slate-400 italic py-3">
@@ -42,10 +44,10 @@ function InventoryTable({ products, onEdit, onDelete }) {
             <th className="p-3">Weight</th>
             <th className="p-3 text-center">Stock</th>
             <th className="p-3 text-center">Health Status</th>
-            <th className="p-3 text-center">Initial Price</th>
+            {isAdmin && <th className="p-3 text-center">Original Price</th>}
+            <th className="p-3 text-center">Consumer Price</th>
             <th className="p-3 text-center">Retail Price</th>
-            <th className="p-3 text-center">Wholesale Price</th>
-            <th className="p-3 text-center">Actions</th>
+            {isAdmin && <th className="p-3 text-center">Actions</th>}
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
@@ -60,31 +62,35 @@ function InventoryTable({ products, onEdit, onDelete }) {
                   {p.health_indicator}
                 </span>
               </td>
-              <td className="p-3 text-center text-slate-500">
-                {formatCurrency(p.initial_price)}
-              </td>
+              {isAdmin && (
+                <td className="p-3 text-center text-slate-500">
+                  {formatCurrency(p.initial_price)}
+                </td>
+              )}
               <td className="p-3 text-center">
                 {formatCurrency(p.regular_retail)}
               </td>
               <td className="p-3 text-center text-red-600">
                 {formatCurrency(p.wholesale_price)}
               </td>
-              <td className="p-3 text-center space-x-1">
-                <button
-                  type="button"
-                  onClick={() => onEdit(p)}
-                  className="text-xs font-bold bg-amber-100 hover:bg-amber-500 hover:text-white px-2.5 py-1 rounded-lg"
-                >
-                  Edit
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onDelete(p)}
-                  className="text-xs font-bold bg-red-50 text-red-600 hover:bg-red-600 hover:text-white px-2.5 py-1 rounded-lg"
-                >
-                  Delete
-                </button>
-              </td>
+              {isAdmin && (
+                <td className="p-3 text-center space-x-1">
+                  <button
+                    type="button"
+                    onClick={() => onEdit(p)}
+                    className="text-xs font-bold bg-amber-100 hover:bg-amber-500 hover:text-white px-2.5 py-1 rounded-lg"
+                  >
+                    Edit
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onDelete(p)}
+                    className="text-xs font-bold bg-red-50 text-red-600 hover:bg-red-600 hover:text-white px-2.5 py-1 rounded-lg"
+                  >
+                    Delete
+                  </button>
+                </td>
+              )}
             </tr>
           ))}
         </tbody>
@@ -96,8 +102,8 @@ function InventoryTable({ products, onEdit, onDelete }) {
 
 export default function InventoryPage() {
   const { showToast } = useToast();
+  const { isAdministrator } = useAuth();
   const [products, setProducts] = useState([]);
-  const [brandOverview, setBrandOverview] = useState([]);
   const [brands, setBrands] = useState(FALLBACK_BRANDS);
   const [brandFilter, setBrandFilter] = useState("");
   const [conditionFilter, setConditionFilter] = useState("");
@@ -108,6 +114,7 @@ export default function InventoryPage() {
   const [editProduct, setEditProduct] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [inventoryRefreshKey, setInventoryRefreshKey] = useState(0);
 
   const loadData = useCallback(async () => {
     try {
@@ -116,13 +123,11 @@ export default function InventoryPage() {
       if (brandFilter) params.brand = brandFilter;
       if (conditionFilter) params.condition = conditionFilter;
       if (stockTierFilter) params.stockTier = stockTierFilter;
-      const [productsRes, overviewRes, brandsRes] = await Promise.all([
+      const [productsRes, brandsRes] = await Promise.all([
         api.getProducts(params),
-        api.getBrandOverview(),
         api.getBrands(),
       ]);
       setProducts(productsRes.data);
-      setBrandOverview(overviewRes.data);
       setBrands(brandsRes.data?.length ? brandsRes.data : FALLBACK_BRANDS);
     } catch (err) {
       showToast("Load Failed", err.message, "error");
@@ -167,6 +172,7 @@ export default function InventoryPage() {
       setForm(emptyForm);
       setAddModalOpen(false);
       await loadData();
+      setInventoryRefreshKey((k) => k + 1);
     } catch (err) {
       showToast("Save Failed", err.message, "error");
     } finally {
@@ -190,6 +196,7 @@ export default function InventoryPage() {
       showToast("Updated", "Product record updated.");
       setEditProduct(null);
       await loadData();
+      setInventoryRefreshKey((k) => k + 1);
     } catch (err) {
       showToast("Update Failed", err.message, "error");
     } finally {
@@ -205,6 +212,7 @@ export default function InventoryPage() {
       showToast("Deleted", "Product permanently removed.");
       setDeleteTarget(null);
       await loadData();
+      setInventoryRefreshKey((k) => k + 1);
     } catch (err) {
       showToast("Delete Failed", err.message, "error");
     } finally {
@@ -216,65 +224,7 @@ export default function InventoryPage() {
 
   return (
     <div className="space-y-6">
-      <section className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
-        <div className="border-b border-slate-100 pb-2">
-          <h2 className="text-base font-bold text-slate-900">
-            Inventory Brand Overview
-          </h2>
-          <p className="text-xs text-slate-400">
-            Live summary by brand — updates on every inventory change
-          </p>
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          {brands.map((brand) => {
-            const data = brandOverview.find((b) => b.brand === brand) || {
-              total_filled: 0,
-              total_empty: 0,
-              total_combined: 0,
-            };
-            return (
-              <article
-                key={brand}
-                className="rounded-xl border border-slate-200 p-4 bg-gradient-to-br from-white to-slate-50 shadow-sm"
-              >
-                <div className="flex items-center gap-2 mb-3">
-                  <span
-                    className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-red-100 text-red-700 text-xs font-black"
-                    aria-hidden="true"
-                  >
-                    {brand.slice(0, 2).toUpperCase()}
-                  </span>
-                  <h3 className="text-sm font-black text-slate-900">{brand}</h3>
-                </div>
-                <dl className="space-y-2 text-xs">
-                  <div className="flex justify-between">
-                    <dt className="text-slate-500 font-semibold">
-                      Total Filled Tanks
-                    </dt>
-                    <dd className="font-bold text-indigo-600">
-                      {data.total_filled}
-                    </dd>
-                  </div>
-                  <div className="flex justify-between">
-                    <dt className="text-slate-500 font-semibold">
-                      Total Empty Cylinders
-                    </dt>
-                    <dd className="font-bold text-slate-600">
-                      {data.total_empty}
-                    </dd>
-                  </div>
-                  <div className="flex justify-between border-t border-slate-100 pt-2">
-                    <dt className="text-slate-700 font-bold">Total Combined</dt>
-                    <dd className="font-black text-slate-900">
-                      {data.total_combined}
-                    </dd>
-                  </div>
-                </dl>
-              </article>
-            );
-          })}
-        </div>
-      </section>
+      <BrandInventoryOverview refreshKey={inventoryRefreshKey} />
 
       <section className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
         <div className="border-b border-slate-100 pb-2">
@@ -345,20 +295,22 @@ export default function InventoryPage() {
         </div>
       </section>
 
-      <section className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
-        <div className="flex items-center justify-between">
-          <h2 className="text-base font-bold text-slate-900">
-            Catalog Action Controls
-          </h2>
-          <button
-            type="button"
-            onClick={() => setAddModalOpen(true)}
-            className="bg-red-600 hover:bg-red-700 text-white font-bold text-xs px-5 py-2.5 rounded-xl"
-          >
-            Add New Product
-          </button>
-        </div>
-      </section>
+      {isAdministrator && (
+        <section className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+          <div className="flex items-center justify-between">
+            <h2 className="text-base font-bold text-slate-900">
+              Catalog Action Controls
+            </h2>
+            <button
+              type="button"
+              onClick={() => setAddModalOpen(true)}
+              className="bg-red-600 hover:bg-red-700 text-white font-bold text-xs px-5 py-2.5 rounded-xl"
+            >
+              Add New Product
+            </button>
+          </div>
+        </section>
+      )}
 
       {brands.map((brand) => {
         const { filled, empty } = groupedByBrand[brand];
@@ -379,6 +331,7 @@ export default function InventoryPage() {
                     products={filled}
                     onEdit={setEditProduct}
                     onDelete={setDeleteTarget}
+                    isAdmin={isAdministrator}
                   />
                 </div>
               )}
@@ -391,6 +344,7 @@ export default function InventoryPage() {
                     products={empty}
                     onEdit={setEditProduct}
                     onDelete={setDeleteTarget}
+                    isAdmin={isAdministrator}
                   />
                 </div>
               )}
@@ -405,7 +359,7 @@ export default function InventoryPage() {
         );
       })}
 
-      {addModalOpen && (
+      {isAdministrator && addModalOpen && (
         <Modal
           title="Add New Product"
           onClose={() => setAddModalOpen(false)}
@@ -570,7 +524,7 @@ export default function InventoryPage() {
         </Modal>
       )}
 
-      {editProduct && (
+      {isAdministrator && editProduct && (
         <Modal
           title={`Edit Product ${editProduct.product_id}`}
           onClose={() => setEditProduct(null)}
@@ -714,7 +668,7 @@ export default function InventoryPage() {
         </Modal>
       )}
 
-      {deleteTarget && (
+      {isAdministrator && deleteTarget && (
         <Modal
           title="Delete Product"
           onClose={() => setDeleteTarget(null)}

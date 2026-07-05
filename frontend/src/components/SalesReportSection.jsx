@@ -27,20 +27,108 @@ import { api, formatCurrency } from "../api/client";
 import { useToast } from "../context/ToastContext";
 import DownloadSalesReportModal from "./DownloadSalesReportModal";
 
-function MetricCard({ label, value, subtitle }) {
+const BRAND_PALETTE = [
+  "bg-red-500",
+  "bg-blue-500",
+  "bg-amber-500",
+  "bg-emerald-500",
+  "bg-purple-500",
+  "bg-slate-500",
+];
+
+function GrossIncomeIcon() {
   return (
-    <Card withBorder padding="md" radius="md" shadow="sm">
-      <Text size="xs" c="dimmed" tt="uppercase" fw={700}>
-        {label}
-      </Text>
-      <Text size="xl" fw={800} mt={4}>
+    <svg
+      className="h-5 w-5"
+      fill="none"
+      stroke="currentColor"
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+    >
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="2"
+        d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V6m0 10v2m9-8a9 9 0 11-18 0 9 9 0 0118 0z"
+      />
+    </svg>
+  );
+}
+
+function NetIncomeIcon() {
+  return (
+    <svg
+      className="h-5 w-5"
+      fill="none"
+      stroke="currentColor"
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+    >
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="2"
+        d="M3 17l6-6 4 4 8-8M14 7h7v7"
+      />
+    </svg>
+  );
+}
+
+function ExpensesIcon() {
+  return (
+    <svg
+      className="h-5 w-5"
+      fill="none"
+      stroke="currentColor"
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+    >
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="2"
+        d="M9 14l2 2 4-4m5 2a9 9 0 11-18 0 9 9 0 0118 0z"
+      />
+    </svg>
+  );
+}
+
+function OrdersIcon() {
+  return (
+    <svg
+      className="h-5 w-5"
+      fill="none"
+      stroke="currentColor"
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+    >
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="2"
+        d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"
+      />
+    </svg>
+  );
+}
+
+function MetricCard({ label, value, icon, tone = "text-slate-900" }) {
+  return (
+    <Card withBorder padding="lg" radius="md" shadow="sm">
+      <Group justify="space-between" align="flex-start" mb="xs">
+        <Text size="xs" c="dimmed" tt="uppercase" fw={700}>
+          {label}
+        </Text>
+        <span
+          className={`inline-flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100 ${tone}`}
+          aria-hidden="true"
+        >
+          {icon}
+        </span>
+      </Group>
+      <Text size="xl" fw={800} className={tone}>
         {value}
       </Text>
-      {subtitle && (
-        <Text size="xs" c="dimmed" mt={4}>
-          {subtitle}
-        </Text>
-      )}
     </Card>
   );
 }
@@ -131,6 +219,7 @@ export default function SalesReportSection({ refreshKey = 0 }) {
   }, [loadReport, refreshKey]);
 
   const summary = report?.summary;
+  const brandMetrics = report?.brandMetrics || [];
 
   return (
     <section
@@ -144,6 +233,13 @@ export default function SalesReportSection({ refreshKey = 0 }) {
             Sales Overview — filter to refresh all widgets
           </Text>
         </div>
+        <button
+          type="button"
+          onClick={() => setDownloadModalOpen(true)}
+          className="bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs px-4 py-2.5 rounded-xl shrink-0"
+        >
+          Download Sales Report
+        </button>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
@@ -177,30 +273,30 @@ export default function SalesReportSection({ refreshKey = 0 }) {
         </Text>
       ) : (
         <>
-          <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing="md">
+          <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }} spacing="md">
             <MetricCard
               label="Gross Income"
               value={formatCurrency(summary?.grossIncome)}
+              icon={<GrossIncomeIcon />}
+              tone="text-emerald-600"
             />
             <MetricCard
               label="Net Income"
               value={formatCurrency(summary?.netIncome)}
+              icon={<NetIncomeIcon />}
+              tone="text-indigo-600"
             />
             <MetricCard
               label="Total Expenses"
               value={formatCurrency(summary?.totalExpenses)}
-            />
-            <MetricCard
-              label="Total Volume Sold"
-              value={`${Number(summary?.totalVolumeKg || 0).toLocaleString()} kg`}
+              icon={<ExpensesIcon />}
+              tone="text-red-600"
             />
             <MetricCard
               label="Total Orders"
               value={summary?.totalOrders ?? 0}
-            />
-            <MetricCard
-              label="Average Order Value"
-              value={formatCurrency(summary?.averageOrderValue)}
+              icon={<OrdersIcon />}
+              tone="text-slate-700"
             />
           </SimpleGrid>
 
@@ -416,6 +512,48 @@ export default function SalesReportSection({ refreshKey = 0 }) {
                 />
               </Stack>
             </div>
+          </div>
+
+          <div>
+            <Title order={4} mb="md">
+              Brand Sales Metric Volume Distribution
+            </Title>
+            <Card withBorder padding="md" radius="md">
+              {brandMetrics.length === 0 ? (
+                <Text size="sm" c="dimmed">
+                  No sales data for the selected period.
+                </Text>
+              ) : (
+                <div className="space-y-4">
+                  {brandMetrics.map((item, index) => (
+                    <div key={item.brand} className="space-y-1.5">
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="font-bold text-slate-800">
+                          {item.brand}
+                        </span>
+                        <span className="text-slate-500">
+                          {item.total_items_sold} items ·{" "}
+                          <span className="font-bold text-slate-700">
+                            {item.percentage}%
+                          </span>
+                        </span>
+                      </div>
+                      <div className="h-3 bg-slate-100 rounded-full overflow-hidden">
+                        <div
+                          className={`h-full rounded-full transition-all ${BRAND_PALETTE[index % BRAND_PALETTE.length]}`}
+                          style={{ width: `${item.percentage}%` }}
+                          role="progressbar"
+                          aria-valuenow={item.percentage}
+                          aria-valuemin={0}
+                          aria-valuemax={100}
+                          aria-label={`${item.brand} sales share`}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </Card>
           </div>
         </>
       )}

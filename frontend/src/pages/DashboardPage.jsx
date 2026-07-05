@@ -2,20 +2,17 @@ import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api, formatCurrency } from "../api/client";
 import { useToast } from "../context/ToastContext";
+import { useAuth } from "../context/AuthContext";
 import LoadingSpinner from "../components/LoadingSpinner";
 import RecordSaleModal from "../components/RecordSaleModal";
 import RecordExpenseModal from "../components/RecordExpenseModal";
 import SalesReportSection from "../components/SalesReportSection";
+import BrandInventoryOverview from "../components/BrandInventoryOverview";
 import Modal from "../components/Modal";
-
-const BRAND_COLORS = {
-  Regasco: "bg-red-500",
-  Seagas: "bg-blue-500",
-  Pryce: "bg-amber-500",
-};
 
 export default function DashboardPage() {
   const { showToast } = useToast();
+  const { isAdministrator } = useAuth();
   const [metrics, setMetrics] = useState(null);
   const [recentSales, setRecentSales] = useState([]);
   const [pagination, setPagination] = useState({ page: 1, totalPages: 1 });
@@ -93,11 +90,10 @@ export default function DashboardPage() {
   if (loading && !metrics) return <LoadingSpinner />;
 
   const lowStock = metrics?.lowStockProducts || [];
-  const brandMetrics = metrics?.brandSalesMetrics || [];
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         <article className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
           <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">
             Total Items Sold
@@ -123,6 +119,8 @@ export default function DashboardPage() {
           </p>
         </article>
       </div>
+
+      <BrandInventoryOverview refreshKey={reportRefreshKey} />
 
       {lowStock.length > 0 && (
         <div
@@ -176,49 +174,7 @@ export default function DashboardPage() {
         </button>
       </div>
 
-      <SalesReportSection refreshKey={reportRefreshKey} />
-
-      {brandMetrics.length > 0 && (
-        <section
-          className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4"
-          aria-label="Brand sales volume distribution"
-        >
-          <div className="border-b border-slate-100 pb-3">
-            <h2 className="text-lg font-bold text-slate-900">
-              Brand Sales Metric Volume Distribution
-            </h2>
-            <p className="text-xs text-slate-400">
-              Items sold by brand across all active sales
-            </p>
-          </div>
-          <div className="space-y-4">
-            {brandMetrics.map((item) => (
-              <div key={item.brand} className="space-y-1.5">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="font-bold text-slate-800">{item.brand}</span>
-                  <span className="text-slate-500">
-                    {item.total_items_sold} items ·{" "}
-                    <span className="font-bold text-slate-700">
-                      {item.percentage}%
-                    </span>
-                  </span>
-                </div>
-                <div className="h-3 bg-slate-100 rounded-full overflow-hidden">
-                  <div
-                    className={`h-full rounded-full transition-all ${BRAND_COLORS[item.brand] || "bg-slate-500"}`}
-                    style={{ width: `${item.percentage}%` }}
-                    role="progressbar"
-                    aria-valuenow={item.percentage}
-                    aria-valuemin={0}
-                    aria-valuemax={100}
-                    aria-label={`${item.brand} sales share`}
-                  />
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
+      {isAdministrator && <SalesReportSection refreshKey={reportRefreshKey} />}
 
       <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4">
         <div className="border-b border-slate-100 pb-3">
@@ -234,7 +190,9 @@ export default function DashboardPage() {
                 <th className="p-3 text-center">Expense</th>
                 <th className="p-3 text-center">Amount</th>
                 <th className="p-3 text-center">Date</th>
-                <th className="p-3 text-center">Actions</th>
+                {isAdministrator && (
+                  <th className="p-3 text-center">Actions</th>
+                )}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 font-medium text-slate-600">
@@ -249,27 +207,32 @@ export default function DashboardPage() {
                   <td className="p-3 text-center">
                     {new Date(item.date).toLocaleDateString("en-PH")}
                   </td>
-                  <td className="p-3 text-center space-x-1">
-                    <button
-                      type="button"
-                      onClick={() => openEditExpense(item)}
-                      className="text-xs font-bold bg-amber-100 hover:bg-amber-500 hover:text-white px-2.5 py-1 rounded-lg"
-                    >
-                      Edit
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setExpenseDeleteTarget(item)}
-                      className="text-xs font-bold bg-red-50 text-red-600 hover:bg-red-600 hover:text-white px-2.5 py-1 rounded-lg"
-                    >
-                      Delete
-                    </button>
-                  </td>
+                  {isAdministrator && (
+                    <td className="p-3 text-center space-x-1">
+                      <button
+                        type="button"
+                        onClick={() => openEditExpense(item)}
+                        className="text-xs font-bold bg-amber-100 hover:bg-amber-500 hover:text-white px-2.5 py-1 rounded-lg"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setExpenseDeleteTarget(item)}
+                        className="text-xs font-bold bg-red-50 text-red-600 hover:bg-red-600 hover:text-white px-2.5 py-1 rounded-lg"
+                      >
+                        Delete
+                      </button>
+                    </td>
+                  )}
                 </tr>
               ))}
               {dailyExpenses.length === 0 && (
                 <tr>
-                  <td colSpan={4} className="text-center py-4 text-slate-400">
+                  <td
+                    colSpan={isAdministrator ? 4 : 3}
+                    className="text-center py-4 text-slate-400"
+                  >
                     No expenses recorded today.
                   </td>
                 </tr>
@@ -381,7 +344,7 @@ export default function DashboardPage() {
         editingExpense={editingExpense}
       />
 
-      {expenseDeleteTarget && (
+      {isAdministrator && expenseDeleteTarget && (
         <Modal
           title="Delete Expense"
           onClose={() => setExpenseDeleteTarget(null)}

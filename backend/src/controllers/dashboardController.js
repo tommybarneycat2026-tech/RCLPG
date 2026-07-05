@@ -5,13 +5,14 @@ import * as reportService from "../services/reportService.js";
 import { asyncHandler } from "../middleware/errorHandler.js";
 
 export const getMetrics = asyncHandler(async (_req, res) => {
-  const [salesMetrics, inventoryMetrics, lowStock, brandMetrics] =
-    await Promise.all([
-      salesService.getDashboardSalesMetrics(),
-      productService.getInventoryMetrics(),
-      productService.getLowStockProducts(),
-      salesService.getBrandSalesMetrics(),
-    ]);
+  // Brand-level sales distribution now lives inside the Sales Report
+  // section (admin-only, filter-aware) instead of the general dashboard
+  // metrics payload that every authenticated user (including staff) reads.
+  const [salesMetrics, inventoryMetrics, lowStock] = await Promise.all([
+    salesService.getDashboardSalesMetrics(),
+    productService.getInventoryMetrics(),
+    productService.getLowStockProducts(),
+  ]);
 
   res.json({
     success: true,
@@ -22,7 +23,6 @@ export const getMetrics = asyncHandler(async (_req, res) => {
       totalEmptyStock: inventoryMetrics.total_empty,
       lowStockCount: lowStock.length,
       lowStockProducts: lowStock,
-      brandSalesMetrics: brandMetrics,
     },
   });
 });
@@ -111,12 +111,10 @@ export const downloadSalesLog = [
     const { period, startDate } = req.query;
 
     if ((period === "monthly" || period === "yearly") && !startDate) {
-      return res
-        .status(400)
-        .json({
-          success: false,
-          message: "Reference date is required for this period",
-        });
+      return res.status(400).json({
+        success: false,
+        message: "Reference date is required for this period",
+      });
     }
 
     const exportPeriod = period === "today" ? "current_day" : period;
@@ -152,20 +150,16 @@ export const downloadSalesReport = [
     const { period, startDate, endDate } = req.query;
 
     if ((period === "monthly" || period === "yearly") && !startDate) {
-      return res
-        .status(400)
-        .json({
-          success: false,
-          message: "Reference date is required for this period",
-        });
+      return res.status(400).json({
+        success: false,
+        message: "Reference date is required for this period",
+      });
     }
     if (period === "custom" && (!startDate || !endDate)) {
-      return res
-        .status(400)
-        .json({
-          success: false,
-          message: "Start and end dates are required for custom range",
-        });
+      return res.status(400).json({
+        success: false,
+        message: "Start and end dates are required for custom range",
+      });
     }
 
     const analytics = await salesService.getSalesReportAnalytics(

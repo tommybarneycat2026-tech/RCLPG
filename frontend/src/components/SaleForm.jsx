@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { Select } from "@mantine/core";
 import { formatCurrency } from "../api/client";
+import { useToast } from "../context/ToastContext";
 
 function productOptionLabel(product) {
   const statusShort = product.status === "Filled Tank" ? "Filled" : "Empty";
@@ -21,6 +23,7 @@ export default function SaleForm({
   compact = false,
   showPaymentMethod = true,
 }) {
+  const { showToast } = useToast();
   const [mode, setMode] = useState(
     initialValues?.customerId ? "existing" : "existing",
   );
@@ -58,6 +61,23 @@ export default function SaleForm({
     () => filledProducts.filter((p) => p.brand === brand),
     [filledProducts, brand],
   );
+
+  // Searchable customer list: dedupe by name (case-insensitive) so
+  // customers with multiple historical records only appear once, sorted
+  // alphabetically. Mantine's Select performs case-insensitive partial
+  // matching as the user types.
+  const customerOptions = useMemo(() => {
+    const seen = new Map();
+    customers.forEach((c) => {
+      const key = c.name?.trim().toLowerCase();
+      if (key && !seen.has(key)) {
+        seen.set(key, { value: c.customer_id, label: c.name });
+      }
+    });
+    return Array.from(seen.values()).sort((a, b) =>
+      a.label.localeCompare(b.label),
+    );
+  }, [customers]);
 
   const selectedProduct = products.find((p) => p.product_id === productId);
 
@@ -98,6 +118,12 @@ export default function SaleForm({
 
   const handleSubmit = (e) => {
     e.preventDefault();
+    // Mantine's Select doesn't reliably enforce native HTML5 "required"
+    // validation, so guard explicitly before submitting.
+    if (mode === "existing" && !customerId) {
+      showToast("Validation Error", "Please select a customer.", "error");
+      return;
+    }
     onSubmit({
       customerId: mode === "existing" ? customerId : undefined,
       customerName,
@@ -152,26 +178,20 @@ export default function SaleForm({
 
         {mode === "existing" ? (
           <div>
-            <label
-              htmlFor="customer-select"
-              className="block text-xs font-bold uppercase text-slate-500 mb-1"
-            >
-              Customer Name
-            </label>
-            <select
+            <Select
               id="customer-select"
-              value={customerId}
-              onChange={(e) => setCustomerId(e.target.value)}
+              label="Customer Name"
+              placeholder="Search or select a customer..."
+              data={customerOptions}
+              value={customerId || null}
+              onChange={(value) => setCustomerId(value || "")}
+              searchable
+              nothingFoundMessage="No matching customers"
               required
-              className="w-full text-sm py-3 px-4 border border-slate-200 bg-white rounded-xl"
-            >
-              <option value="">Select customer</option>
-              {customers.map((c) => (
-                <option key={c.customer_id} value={c.customer_id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
+              classNames={{
+                label: "text-xs font-bold uppercase text-slate-500 mb-1",
+              }}
+            />
           </div>
         ) : (
           <div>

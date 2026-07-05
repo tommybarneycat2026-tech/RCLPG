@@ -2,6 +2,7 @@ import { body, param, query as q } from "express-validator";
 import * as productService from "../services/productService.js";
 import { PRODUCT_STATUSES, WEIGHT_CLASSES } from "../utils/constants.js";
 import { asyncHandler } from "../middleware/errorHandler.js";
+import { isAdministratorRole } from "../utils/roles.js";
 
 export const listProducts = [
   q("search").optional().isString(),
@@ -15,7 +16,15 @@ export const listProducts = [
       condition: req.query.condition || "",
       stockTier: req.query.stockTier || "",
     });
-    res.json({ success: true, data: products });
+
+    // Initial (acquisition) price is sensitive cost data — only admins may
+    // view it. Staff receive every other product field unchanged.
+    const isAdmin = isAdministratorRole(req.admin?.role);
+    const data = isAdmin
+      ? products
+      : products.map(({ initial_price, ...rest }) => rest);
+
+    res.json({ success: true, data });
   }),
 ];
 
