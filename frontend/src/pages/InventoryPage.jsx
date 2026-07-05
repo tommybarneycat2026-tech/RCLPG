@@ -322,6 +322,7 @@ export default function InventoryPage() {
               <h3 className="text-base font-black text-slate-800 border-l-4 border-red-600 pl-3">
                 {brand} Inventory Holdings
               </h3>
+              <p className="text-xs text-slate-400">IMPORTANT: WHEN RECORDING A SALE, THE CUSTOMER'S LPG TANK SHOULD BE IN THE INVENTORY HOLDING FOR THE SALES TO SUCCEED. MAKE SURE TO ADD EMPTY CYLINDERS OF EACH WEIGHT AND BRAND!</p>
               {filled.length > 0 && (
                 <div className="space-y-2">
                   <h4 className="text-xs font-bold uppercase text-indigo-600 tracking-wider">

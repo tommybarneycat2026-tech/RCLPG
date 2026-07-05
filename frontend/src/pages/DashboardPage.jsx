@@ -264,7 +264,6 @@ export default function DashboardPage() {
             <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold uppercase">
               <tr>
                 <th className="p-3">Customer</th>
-                <th className="p-3">FB Profile</th>
                 <th className="p-3">Product Details</th>
                 <th className="p-3">Customer LPG</th>
                 <th className="p-3 text-center">Qty</th>
@@ -276,11 +275,6 @@ export default function DashboardPage() {
                 <tr key={sale.sale_id}>
                   <td className="p-3 font-bold text-slate-800">
                     {sale.customer_name}
-                  </td>
-                  <td className="p-3">
-                    {sale.fb_name || (
-                      <span className="text-slate-300 italic">-</span>
-                    )}
                   </td>
                   <td className="p-3">
                     {sale.brand} - {sale.weight_class}kg - {sale.product_status}
