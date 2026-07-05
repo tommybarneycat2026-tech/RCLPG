@@ -110,13 +110,6 @@ export default function SalesLogPage() {
           <div className="flex flex-wrap gap-2 shrink-0">
             <button
               type="button"
-              onClick={() => setExpenseModalOpen(true)}
-              className="bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs px-5 py-2.5 rounded-xl"
-            >
-              Add Expenses
-            </button>
-            <button
-              type="button"
               onClick={() => setSaleModalOpen(true)}
               className="bg-red-600 hover:bg-red-700 text-white font-bold text-xs px-5 py-2.5 rounded-xl"
             >
@@ -242,8 +235,6 @@ export default function SalesLogPage() {
             <tr>
               <th className="p-3">Log Date</th>
               <th className="p-3">Customer Name</th>
-              <th className="p-3">Facebook Profile</th>
-              <th className="p-3">Phone Number</th>
               <th className="p-3">Price Type</th>
               <th className="p-3">Product Specification</th>
               <th className="p-3">Customer LPG Tank</th>
@@ -268,16 +259,6 @@ export default function SalesLogPage() {
                 </td>
                 <td className="p-3 font-bold text-slate-800">
                   {sale.customer_name}
-                </td>
-                <td className="p-3">
-                  {sale.fb_name || (
-                    <span className="text-slate-300 italic">-</span>
-                  )}
-                </td>
-                <td className="p-3 font-mono text-xs">
-                  {sale.phone_number || (
-                    <span className="text-slate-300 italic">-</span>
-                  )}
                 </td>
                 <td className="p-3">{sale.price_type}</td>
                 <td className="p-3">

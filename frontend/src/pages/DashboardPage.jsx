@@ -231,22 +231,22 @@ export default function DashboardPage() {
           <table className="w-full text-left text-xs whitespace-nowrap">
             <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold uppercase">
               <tr>
-                <th className="p-3">Expense</th>
-                <th className="p-3 text-right">Amount</th>
-                <th className="p-3">Date</th>
+                <th className="p-3 text-center">Expense</th>
+                <th className="p-3 text-center">Amount</th>
+                <th className="p-3 text-center">Date</th>
                 <th className="p-3 text-center">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 font-medium text-slate-600">
               {dailyExpenses.map((item) => (
                 <tr key={item.expenses_id}>
-                  <td className="p-3 font-bold text-slate-800">
+                  <td className="p-3 font-bold text-slate-800 text-center">
                     {item.expenses}
                   </td>
-                  <td className="p-3 text-right text-red-600 font-bold">
+                  <td className="p-3 text-red-600 font-bold text-center">
                     {formatCurrency(item.amount)}
                   </td>
-                  <td className="p-3">
+                  <td className="p-3 text-center">
                     {new Date(item.date).toLocaleDateString("en-PH")}
                   </td>
                   <td className="p-3 text-center space-x-1">

@@ -144,13 +144,6 @@ export default function SalesReportSection({ refreshKey = 0 }) {
             Sales Overview — filter to refresh all widgets
           </Text>
         </div>
-        <button
-          type="button"
-          onClick={() => setDownloadModalOpen(true)}
-          className="bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs px-4 py-2.5 rounded-xl shrink-0"
-        >
-          Download Sales Report
-        </button>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
@@ -196,11 +189,6 @@ export default function SalesReportSection({ refreshKey = 0 }) {
             <MetricCard
               label="Total Expenses"
               value={formatCurrency(summary?.totalExpenses)}
-            />
-            <MetricCard
-              label="Cost of Goods Sold"
-              value={formatCurrency(summary?.costOfGoodsSold)}
-              subtitle="Acquisition cost of units sold"
             />
             <MetricCard
               label="Total Volume Sold"
