@@ -159,6 +159,16 @@ export default function RecordSaleModal({ open, onClose, onSuccess }) {
               <dd>{confirmSale.quantity}</dd>
             </div>
             <div className="flex justify-between">
+              <dt className="text-slate-500">Tank Type</dt>
+              <dd>
+                {confirmSale.purchaseTank
+                  ? "Purchase Tank"
+                  : confirmSale.isFilled
+                    ? "Filled"
+                    : "Empty"}
+              </dd>
+            </div>
+            <div className="flex justify-between">
               <dt className="text-slate-500">Customer LPG (Empty Returned)</dt>
               <dd className="font-semibold">
                 {confirmSale.lpgTankVariant || "N/A"}
