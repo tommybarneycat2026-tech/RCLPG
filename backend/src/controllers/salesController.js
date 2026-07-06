@@ -44,6 +44,7 @@ export const createSale = [
   // sale). Empty Cylinder products are sold directly with no trade-in, so
   // this is validated conditionally inside salesService instead.
   body("lpgTankVariant").optional({ values: "falsy" }).trim().isString(),
+  body("purchaseTank").optional().isBoolean(),
   body("customerId").optional().isUUID(),
   body("customerName")
     .if(body("customerId").not().exists())
@@ -62,6 +63,7 @@ export const createSale = [
       paymentMethod: req.body.paymentMethod || "Fully Paid",
       initialPayment: req.body.initialPayment,
       lpgTankVariant: req.body.lpgTankVariant,
+      purchaseTank: req.body.purchaseTank ?? false,
     });
     res.status(201).json({ success: true, data: sale });
   }),
@@ -75,6 +77,7 @@ export const updateSale = [
   body("unitPrice").isFloat({ min: 0 }),
   body("priceType").isIn(PRICE_TYPES),
   body("lpgTankVariant").optional({ values: "falsy" }).trim().isString(),
+  body("purchaseTank").optional().isBoolean(),
   asyncHandler(async (req, res) => {
     const sale = await salesService.updateSale(req.params.saleId, {
       customerName: req.body.customerName,
@@ -85,6 +88,7 @@ export const updateSale = [
       unitPrice: req.body.unitPrice,
       priceType: req.body.priceType,
       lpgTankVariant: req.body.lpgTankVariant,
+      purchaseTank: req.body.purchaseTank ?? false,
     });
     res.json({ success: true, data: sale });
   }),

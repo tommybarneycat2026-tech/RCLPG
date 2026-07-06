@@ -123,7 +123,7 @@ export async function getSaleById(saleId) {
 //   cylinder) with no trade-in swap, so lpgTankVariant does not apply and
 //   the resolved variant is null.
 async function applySaleStockEffect(
-  { productId, quantity, lpgTankVariant },
+  { productId, quantity, lpgTankVariant, purchaseTank = false },
   client,
 ) {
   const product = await productService.getProductById(productId, client);
@@ -132,11 +132,21 @@ async function applySaleStockEffect(
   }
 
   if (product.status === "Filled Tank") {
+    if (purchaseTank) {
+      if (quantity > product.stock_quantity) {
+        throw new AppError(
+          `Insufficient stock. Available: ${product.stock_quantity}, requested: ${quantity}`,
+          400,
+        );
+      }
+      await productService.adjustStock(productId, -quantity, client);
+      return null;
+    }
+
     if (!lpgTankVariant) {
       throw new AppError("Customer LPG tank brand is required", 400);
     }
-    // Recognize (and register, if new) the brand of the tank the customer
-    // brought in, so it appears consistently across brand selection UIs.
+
     const resolvedVariant = await ensureBrand(lpgTankVariant);
     await productService.executeTankSwap(
       { filledProductId: productId, emptyBrand: resolvedVariant, quantity },
@@ -203,6 +213,7 @@ export async function createSale(payload) {
         productId: payload.productId,
         quantity: payload.quantity,
         lpgTankVariant: payload.lpgTankVariant,
+        purchaseTank: payload.purchaseTank,
       },
       client,
     );
