@@ -77,6 +77,9 @@ export async function deleteExpense(expensesId) {
 
 export async function listExpenses({
   todayOnly = false,
+  quickFilter = "today",
+  startDate = "",
+  endDate = "",
   page = 1,
   limit = 10,
 } = {}) {
@@ -86,6 +89,17 @@ export async function listExpenses({
 
   if (todayOnly) {
     dateClause = "WHERE e.date = CURRENT_DATE";
+  } else {
+    const { where, params: filterParams } = buildReportDateFilter(
+      quickFilter,
+      startDate,
+      endDate,
+      "e.date",
+    );
+    params.push(...filterParams);
+    if (where) {
+      dateClause = `WHERE 1=1 ${where}`;
+    }
   }
 
   const countResult = await query(

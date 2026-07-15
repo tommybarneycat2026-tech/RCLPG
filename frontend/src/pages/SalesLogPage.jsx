@@ -26,6 +26,10 @@ export default function SalesLogPage() {
   const [expenseModalOpen, setExpenseModalOpen] = useState(false);
   const [downloadModalOpen, setDownloadModalOpen] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [expenses, setExpenses] = useState([]);
+  const [expenseFilter, setExpenseFilter] = useState("today");
+  const [expenseStartDate, setExpenseStartDate] = useState("");
+  const [expenseEndDate, setExpenseEndDate] = useState("");
 
   const selectedSale = sales.find((s) => s.sale_id === selectedSaleId);
 
@@ -53,9 +57,27 @@ export default function SalesLogPage() {
     }
   }, [search, dateFilter, customerNameFilter, productFilter, showToast]);
 
+  const loadExpenses = useCallback(async () => {
+    try {
+      const expenseParams = { limit: "100", quickFilter: expenseFilter };
+      if (expenseFilter === "custom") {
+        if (expenseStartDate) expenseParams.startDate = expenseStartDate;
+        if (expenseEndDate) expenseParams.endDate = expenseEndDate;
+      }
+      const expensesRes = await api.getExpenses(expenseParams);
+      setExpenses(expensesRes.data || []);
+    } catch (err) {
+      showToast("Expenses Load Failed", err.message, "error");
+    }
+  }, [expenseEndDate, expenseFilter, expenseStartDate, showToast]);
+
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  useEffect(() => {
+    loadExpenses();
+  }, [loadExpenses]);
 
   const brands = [...new Set(products.map((p) => p.brand))];
 
@@ -195,6 +217,81 @@ export default function SalesLogPage() {
               />
             </div>
           </div>
+        </div>
+      </div>
+
+      <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-3">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <h3 className="text-sm font-bold text-slate-900">Expense Overview</h3>
+            <p className="text-[11px] text-slate-400">
+              Review expenses for the selected time period.
+            </p>
+          </div>
+          <div className="flex flex-col sm:flex-row gap-2">
+            <select
+              value={expenseFilter}
+              onChange={(e) => setExpenseFilter(e.target.value)}
+              className="text-xs p-2.5 border border-slate-200 rounded-xl"
+            >
+              <option value="today">Today</option>
+              <option value="week">This Week</option>
+              <option value="month">This Month</option>
+              <option value="first_half">First Half (Jan-Jun)</option>
+              <option value="second_half">Second Half (Jul-Dec)</option>
+              <option value="year">This Year</option>
+              <option value="custom">Custom Date Range</option>
+            </select>
+            {expenseFilter === "custom" && (
+              <div className="flex gap-2">
+                <input
+                  type="date"
+                  value={expenseStartDate}
+                  onChange={(e) => setExpenseStartDate(e.target.value)}
+                  className="text-xs p-2.5 border border-slate-200 rounded-xl"
+                />
+                <input
+                  type="date"
+                  value={expenseEndDate}
+                  onChange={(e) => setExpenseEndDate(e.target.value)}
+                  className="text-xs p-2.5 border border-slate-200 rounded-xl"
+                />
+              </div>
+            )}
+          </div>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs whitespace-nowrap">
+            <thead className="bg-white border-b border-slate-200 text-slate-500 font-bold uppercase">
+              <tr>
+                <th className="p-3 text-center">Expense</th>
+                <th className="p-3 text-center">Amount</th>
+                <th className="p-3 text-center">Date</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 font-medium text-slate-600">
+              {expenses.map((item) => (
+                <tr key={item.expenses_id}>
+                  <td className="p-3 font-bold text-slate-800 text-center">
+                    {item.expenses}
+                  </td>
+                  <td className="p-3 text-red-600 font-bold text-center">
+                    {formatCurrency(item.amount)}
+                  </td>
+                  <td className="p-3 text-center">
+                    {new Date(item.date).toLocaleDateString("en-PH")}
+                  </td>
+                </tr>
+              ))}
+              {expenses.length === 0 && (
+                <tr>
+                  <td colSpan={3} className="text-center py-4 text-slate-400">
+                    No expenses recorded for the selected period.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
         </div>
       </div>
 
@@ -366,7 +463,10 @@ export default function SalesLogPage() {
       <RecordExpenseModal
         open={expenseModalOpen}
         onClose={() => setExpenseModalOpen(false)}
-        onSuccess={loadData}
+        onSuccess={() => {
+          loadData();
+          loadExpenses();
+        }}
       />
       {downloadModalOpen && (
         <DownloadSalesLogModal onClose={() => setDownloadModalOpen(false)} />

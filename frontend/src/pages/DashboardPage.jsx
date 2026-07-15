@@ -23,28 +23,41 @@ export default function DashboardPage() {
   const [expenseDeleteTarget, setExpenseDeleteTarget] = useState(null);
   const [deletingExpense, setDeletingExpense] = useState(false);
   const [dailyExpenses, setDailyExpenses] = useState([]);
+  const [expenseDateFilter, setExpenseDateFilter] = useState("today");
+  const [expenseStartDate, setExpenseStartDate] = useState("");
+  const [expenseEndDate, setExpenseEndDate] = useState("");
   const [reportRefreshKey, setReportRefreshKey] = useState(0);
 
   const loadData = useCallback(
     async (page = 1) => {
       try {
         setLoading(true);
+        const expenseParams = {
+          limit: "100",
+          quickFilter: expenseDateFilter,
+        };
+
+        if (expenseDateFilter === "custom") {
+          if (expenseStartDate) expenseParams.startDate = expenseStartDate;
+          if (expenseEndDate) expenseParams.endDate = expenseEndDate;
+        }
+
         const [metricsRes, salesRes, expensesRes] = await Promise.all([
           api.getMetrics(),
           api.getSales({ todayOnly: "true", page: String(page), limit: "10" }),
-          api.getExpenses({ todayOnly: "true", limit: "100" }),
+          api.getExpenses(expenseParams),
         ]);
         setMetrics(metricsRes.data);
         setRecentSales(salesRes.data);
         setPagination(salesRes.pagination);
-        setDailyExpenses(expensesRes.data);
+        setDailyExpenses(expensesRes.data || []);
       } catch (err) {
         showToast("Load Failed", err.message, "error");
       } finally {
         setLoading(false);
       }
     },
-    [showToast],
+    [expenseDateFilter, expenseEndDate, expenseStartDate, showToast],
   );
 
   useEffect(() => {
@@ -177,11 +190,46 @@ export default function DashboardPage() {
       {isAdministrator && <SalesReportSection refreshKey={reportRefreshKey} />}
 
       <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4">
-        <div className="border-b border-slate-100 pb-3">
-          <h2 className="text-lg font-bold text-slate-900">Expenses</h2>
-          <p className="text-xs text-slate-400">
-            Today&apos;s recorded expenses
-          </p>
+        <div className="border-b border-slate-100 pb-3 space-y-3">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <h2 className="text-lg font-bold text-slate-900">Expenses</h2>
+              <p className="text-xs text-slate-400">
+                Filter expenses by date range and review the activity list.
+              </p>
+            </div>
+            <div className="flex flex-col sm:flex-row gap-2">
+              <select
+                value={expenseDateFilter}
+                onChange={(e) => setExpenseDateFilter(e.target.value)}
+                className="text-xs p-2.5 border border-slate-200 rounded-xl"
+              >
+                <option value="today">Today</option>
+                <option value="week">This Week</option>
+                <option value="month">This Month</option>
+                <option value="first_half">First Half (Jan-Jun)</option>
+                <option value="second_half">Second Half (Jul-Dec)</option>
+                <option value="year">This Year</option>
+                <option value="custom">Custom Date Range</option>
+              </select>
+              {expenseDateFilter === "custom" && (
+                <div className="flex gap-2">
+                  <input
+                    type="date"
+                    value={expenseStartDate}
+                    onChange={(e) => setExpenseStartDate(e.target.value)}
+                    className="text-xs p-2.5 border border-slate-200 rounded-xl"
+                  />
+                  <input
+                    type="date"
+                    value={expenseEndDate}
+                    onChange={(e) => setExpenseEndDate(e.target.value)}
+                    className="text-xs p-2.5 border border-slate-200 rounded-xl"
+                  />
+                </div>
+              )}
+            </div>
+          </div>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs whitespace-nowrap">
@@ -233,7 +281,7 @@ export default function DashboardPage() {
                     colSpan={isAdministrator ? 4 : 3}
                     className="text-center py-4 text-slate-400"
                   >
-                    No expenses recorded today.
+                    No expenses recorded for the selected period.
                   </td>
                 </tr>
               )}
