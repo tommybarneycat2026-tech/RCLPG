@@ -3,6 +3,7 @@ import { api, formatCurrency } from '../api/client';
 import { useToast } from '../context/ToastContext';
 import LoadingSpinner from '../components/LoadingSpinner';
 import Modal from '../components/Modal';
+import DownloadCreditLogModal from '../components/DownloadCreditLogModal';
 
 function CreditStatusBadge({ status }) {
   const isPaid = status === 'Paid';
@@ -174,6 +175,7 @@ export default function CreditLogsPage() {
   const [credits, setCredits] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeModal, setActiveModal] = useState(null);
+  const [downloadOpen, setDownloadOpen] = useState(false);
 
   const loadData = useCallback(async () => {
     try {
@@ -196,7 +198,10 @@ export default function CreditLogsPage() {
   return (
     <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4">
       <div className="border-b border-slate-100 pb-4">
-        <h2 className="text-lg font-bold text-slate-900">Customer Credit Register</h2>
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-bold text-slate-900">Customer Credit Register</h2>
+          <button type="button" onClick={() => setDownloadOpen(true)} className="bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs px-4 py-2.5 rounded-xl">Download Credit Log</button>
+        </div>
         <p className="text-xs text-red-600 font-bold uppercase tracking-wider mt-1">UTANG DESK</p>
         <p className="text-xs text-slate-400 mt-1">Track outstanding balances, installment payments, and customer credit status</p>
       </div>
@@ -260,6 +265,9 @@ export default function CreditLogsPage() {
           onClose={() => setActiveModal(null)}
           onSettled={loadData}
         />
+      )}
+      {downloadOpen && (
+        <DownloadCreditLogModal onClose={() => setDownloadOpen(false)} />
       )}
     </div>
   );

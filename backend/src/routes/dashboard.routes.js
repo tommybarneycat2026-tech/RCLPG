@@ -41,5 +41,11 @@ router.get(
   ...dashboardController.downloadSalesLog,
   validate,
 );
+router.get(
+  "/download-credit-log",
+  requireAdministrator,
+  ...dashboardController.downloadCreditLog,
+  validate,
+);
 
 export default router;

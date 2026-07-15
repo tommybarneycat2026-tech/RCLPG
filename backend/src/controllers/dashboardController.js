@@ -2,6 +2,7 @@ import { query as q } from "express-validator";
 import * as salesService from "../services/salesService.js";
 import * as productService from "../services/productService.js";
 import * as reportService from "../services/reportService.js";
+import * as creditService from "../services/creditService.js";
 import { asyncHandler } from "../middleware/errorHandler.js";
 
 export const getMetrics = asyncHandler(async (_req, res) => {
@@ -73,7 +74,7 @@ export const exportReport = [
 export const getSalesReport = [
   q("quickFilter")
     .optional()
-    .isIn(["today", "week", "month", "year", "custom"]),
+    .isIn(["today", "week", "month", "year", "first_half", "second_half", "custom"]),
   q("startDate").optional().isISO8601(),
   q("endDate").optional().isISO8601(),
   asyncHandler(async (req, res) => {
@@ -89,7 +90,7 @@ export const getSalesReport = [
 export const getDailyMetrics = [
   q("quickFilter")
     .optional()
-    .isIn(["today", "week", "month", "year", "custom"]),
+    .isIn(["today", "week", "month", "year", "first_half", "second_half", "custom"]),
   q("startDate").optional().isISO8601(),
   q("endDate").optional().isISO8601(),
   asyncHandler(async (req, res) => {
@@ -104,98 +105,119 @@ export const getDailyMetrics = [
 
 export const downloadSalesLog = [
   q("period")
-    .isIn(["today", "monthly", "yearly"])
-    .withMessage("Invalid period"),
+    .isIn(["today", "daily", "weekly", "monthly", "first_half", "second_half", "yearly", "custom"]).withMessage("Invalid period"),
   q("startDate").optional().isISO8601(),
   asyncHandler(async (req, res) => {
-    const { period, startDate } = req.query;
+    const { period, startDate, endDate, format } = req.query;
 
-    if ((period === "monthly" || period === "yearly") && !startDate) {
-      return res.status(400).json({
-        success: false,
-        message: "Reference date is required for this period",
-      });
+    const exportPeriod = period === 'today' ? 'current_day' : period;
+    const rows = await salesService.getReportRows(exportPeriod, startDate, endDate);
+
+    const title = 'RCLPG Customer & Sales Log';
+    if (format === 'pdf' || !format) {
+      const buffer = await reportService.buildSalesLogPdfBuffer(rows, title, req.user?.name);
+      const filenameBase = `RCLPG_Sales_Log_${period}_${Date.now()}`;
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="${filenameBase}.pdf"`);
+      return res.send(buffer);
     }
 
-    const exportPeriod = period === "today" ? "current_day" : period;
-    const rows = await salesService.getReportRows(
-      exportPeriod,
-      startDate,
-      null,
-    );
-
-    const title = "RCLPG Customer & Sales Log";
     const buffer = await reportService.buildSalesLogExcelBuffer(rows, title);
-
     const filenameBase = `RCLPG_Sales_Log_${period}_${Date.now()}`;
-    res.setHeader(
-      "Content-Type",
-      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    );
-    res.setHeader(
-      "Content-Disposition",
-      `attachment; filename="${filenameBase}.xlsx"`,
-    );
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${filenameBase}.xlsx"`);
     return res.send(Buffer.from(buffer));
   }),
 ];
 
 export const downloadSalesReport = [
-  q("period")
-    .isIn(["today", "monthly", "yearly", "custom"])
-    .withMessage("Invalid period"),
-  q("startDate").optional().isISO8601(),
-  q("endDate").optional().isISO8601(),
+  q('period')
+    .isIn(['today', 'daily', 'weekly', 'monthly', 'first_half', 'second_half', 'yearly', 'custom'])
+    .withMessage('Invalid period'),
+  q('startDate').optional().isISO8601(),
+  q('endDate').optional().isISO8601(),
   asyncHandler(async (req, res) => {
-    const { period, startDate, endDate } = req.query;
+    const { period, startDate, endDate, format } = req.query;
 
-    if ((period === "monthly" || period === "yearly") && !startDate) {
-      return res.status(400).json({
-        success: false,
-        message: "Reference date is required for this period",
-      });
+    if ((period === 'monthly' || period === 'yearly') && !startDate) {
+      return res.status(400).json({ success: false, message: 'Reference date is required for this period' });
     }
-    if (period === "custom" && (!startDate || !endDate)) {
-      return res.status(400).json({
-        success: false,
-        message: "Start and end dates are required for custom range",
-      });
+    if (period === 'custom' && (!startDate || !endDate)) {
+      return res.status(400).json({ success: false, message: 'Start and end dates are required for custom range' });
     }
 
-    const analytics = await salesService.getSalesReportAnalytics(
-      period,
-      startDate,
-      endDate,
-    );
+    const analytics = await salesService.getSalesReportAnalytics(period, startDate, endDate);
 
     const periodLabels = {
-      today: "Today",
+      today: 'Today',
       monthly: startDate
-        ? new Date(startDate).toLocaleDateString("en-PH", {
-            month: "long",
-            year: "numeric",
-          })
-        : "Monthly",
-      yearly: startDate ? new Date(startDate).getFullYear() : "Yearly",
+        ? new Date(startDate).toLocaleDateString('en-PH', { month: 'long', year: 'numeric' })
+        : 'Monthly',
+      yearly: startDate ? new Date(startDate).getFullYear() : 'Yearly',
       custom: `${startDate} to ${endDate}`,
+      first_half: 'First Half',
+      second_half: 'Second Half',
+      weekly: 'Weekly',
+      daily: startDate || 'Daily',
     };
 
-    const title = "RCLPG Sales Report";
-    const buffer = await reportService.buildSalesReportExcelBuffer(
-      analytics,
-      title,
-      periodLabels[period] || period,
-    );
+    const title = 'RCLPG Sales Report';
+    if (format === 'pdf' || !format) {
+      const buffer = await reportService.buildSalesReportPdfBuffer(
+        analytics,
+        title,
+        periodLabels[period] || period,
+        req.user?.name,
+      );
+      const filenameBase = `RCLPG_Sales_Report_${period}_${Date.now()}`;
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="${filenameBase}.pdf"`);
+      return res.send(buffer);
+    }
 
+    const buffer = await reportService.buildSalesReportExcelBuffer(analytics, title, periodLabels[period] || period);
     const filenameBase = `RCLPG_Sales_Report_${period}_${Date.now()}`;
-    res.setHeader(
-      "Content-Type",
-      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    );
-    res.setHeader(
-      "Content-Disposition",
-      `attachment; filename="${filenameBase}.xlsx"`,
-    );
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${filenameBase}.xlsx"`);
     return res.send(Buffer.from(buffer));
+  }),
+];
+
+export const downloadCreditLog = [
+  q('period')
+    .isIn(['daily', 'weekly', 'monthly', 'first_half', 'second_half', 'yearly', 'custom'])
+    .withMessage('Invalid period'),
+  q('startDate').optional().isISO8601(),
+  q('endDate').optional().isISO8601(),
+  asyncHandler(async (req, res) => {
+    const { period, startDate, endDate } = req.query;
+    // For credit logs we reuse the credit register and filter on date if provided
+    const rows = await creditService.getCreditRegister();
+    // Optionally filter rows by date range if provided
+    let filtered = rows;
+    if (period === 'daily' && startDate) {
+      filtered = rows.filter((r) => new Date(r.date_created).toISOString().slice(0, 10) === startDate);
+    } else if (period === 'monthly' && startDate) {
+      const yr = new Date(startDate).getFullYear();
+      const mo = new Date(startDate).getMonth();
+      filtered = rows.filter((r) => {
+        const d = new Date(r.date_created);
+        return d.getFullYear() === yr && d.getMonth() === mo;
+      });
+    }
+
+    const summary = {
+      totalOutstanding: filtered.reduce((s, r) => s + (r.remaining_credit || 0), 0),
+      totalPaid: filtered.reduce((s, r) => s + (r.total_paid || 0), 0),
+      totalRemaining: filtered.reduce((s, r) => s + (r.remaining_credit || 0), 0),
+      paidAccounts: filtered.filter((r) => r.remaining_credit <= 0).length,
+      unpaidAccounts: filtered.filter((r) => r.remaining_credit > 0).length,
+    };
+
+    const buffer = await reportService.buildCreditLogPdfBuffer(filtered, 'RCLPG Credit Log Report', summary, req.user?.name);
+    const filenameBase = `RCLPG_Credit_Log_${Date.now()}`;
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${filenameBase}.pdf"`);
+    return res.send(buffer);
   }),
 ];

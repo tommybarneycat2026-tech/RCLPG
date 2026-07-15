@@ -31,6 +31,14 @@ export function buildReportDateFilter(quickFilter, startDate, endDate, dateColum
     } else {
       clauses.push(`${dateExpr} >= DATE_TRUNC('year', CURRENT_DATE)`);
     }
+  } else if (quickFilter === 'first_half') {
+    // Jan 1 - Jun 30 of current year
+    const yearStart = new Date().getFullYear();
+    clauses.push(`DATE(${dateExpr}) BETWEEN '${yearStart}-01-01' AND '${yearStart}-06-30'`);
+  } else if (quickFilter === 'second_half') {
+    // Jul 1 - Dec 31 of current year
+    const yearStart = new Date().getFullYear();
+    clauses.push(`DATE(${dateExpr}) BETWEEN '${yearStart}-07-01' AND '${yearStart}-12-31'`);
   } else if (startDate && endDate) {
     if (dateColumn === 'e.date') {
       clauses.push(`e.date BETWEEN $${idx++} AND $${idx++}`);
@@ -72,6 +80,21 @@ export function buildExportDateFilter(period, startDate, endDate, dateColumn = '
       clauses.push(`DATE_TRUNC('month', ${dateColumn}) = DATE_TRUNC('month', $${idx++}::date)`);
     }
     params.push(startDate);
+  } else if (period === 'weekly' && startDate) {
+    if (dateColumn === 'e.date') {
+      clauses.push(`e.date >= DATE_TRUNC('week', $${idx++}::date)::date`);
+    } else {
+      clauses.push(`${dateColumn} >= DATE_TRUNC('week', $${idx++}::date)`);
+    }
+    params.push(startDate);
+  } else if ((period === 'first_half' || period === 'second_half')) {
+    // if startDate provided, use its year, otherwise current year
+    const year = startDate ? new Date(startDate).getFullYear() : new Date().getFullYear();
+    if (period === 'first_half') {
+      clauses.push(`DATE(${dateColumn}) BETWEEN '${year}-01-01' AND '${year}-06-30'`);
+    } else {
+      clauses.push(`DATE(${dateColumn}) BETWEEN '${year}-07-01' AND '${year}-12-31'`);
+    }
   } else if (period === 'yearly' && startDate) {
     if (dateColumn === 'e.date') {
       clauses.push(`DATE_TRUNC('year', e.date) = DATE_TRUNC('year', $${idx++}::date)`);

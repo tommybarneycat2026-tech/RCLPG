@@ -4,8 +4,12 @@ import { useToast } from '../context/ToastContext';
 
 const PERIODS = [
   { value: 'today', label: 'Today' },
+  { value: 'weekly', label: 'Weekly' },
   { value: 'monthly', label: 'Monthly' },
+  { value: 'first_half', label: 'First Half (Jan–Jun)' },
+  { value: 'second_half', label: 'Second Half (Jul–Dec)' },
   { value: 'yearly', label: 'Yearly' },
+  { value: 'custom', label: 'Custom Date Range' },
 ];
 
 export default function DownloadSalesLogModal({ onClose }) {
@@ -36,6 +40,11 @@ export default function DownloadSalesLogModal({ onClose }) {
         params.startDate = `${yearValue}-01-01`;
       }
 
+      if (period === 'first_half' || period === 'second_half') {
+        params.startDate = yearValue ? `${yearValue}-01-01` : '';
+      }
+
+      params.format = 'pdf';
       const { blob, filename } = await api.downloadSalesLog(params);
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
@@ -59,7 +68,7 @@ export default function DownloadSalesLogModal({ onClose }) {
           Download Sales Log
         </h2>
         <p className="text-xs text-slate-500">
-          Export the Customer & Sales Log to Excel for the selected period.
+          Export the Customer & Sales Log to PDF for the selected period.
         </p>
 
         <fieldset className="space-y-2">

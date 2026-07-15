@@ -94,6 +94,8 @@ export const api = {
   },
   createProduct: (body) =>
     request("/products", { method: "POST", body: JSON.stringify(body) }),
+  archiveProduct: (productId) =>
+    request(`/products/${productId}/archive`, { method: "PATCH" }),
   updateProduct: (productId, body) =>
     request(`/products/${productId}`, {
       method: "PUT",
@@ -163,7 +165,7 @@ export const api = {
     const blob = await response.blob();
     const disposition = response.headers.get("Content-Disposition") || "";
     const match = disposition.match(/filename="(.+)"/);
-    const filename = match?.[1] || `RCLPG_Sales_Report_${Date.now()}.xlsx`;
+    const filename = match?.[1] || `RCLPG_Sales_Report_${Date.now()}.pdf`;
     return { blob, filename };
   },
   downloadSalesLog: async (params) => {
@@ -172,7 +174,16 @@ export const api = {
     const blob = await response.blob();
     const disposition = response.headers.get("Content-Disposition") || "";
     const match = disposition.match(/filename="(.+)"/);
-    const filename = match?.[1] || `RCLPG_Sales_Log_${Date.now()}.xlsx`;
+    const filename = match?.[1] || `RCLPG_Sales_Log_${Date.now()}.pdf`;
+    return { blob, filename };
+  },
+  downloadCreditLog: async (params) => {
+    const qs = new URLSearchParams(params).toString();
+    const response = await request(`/dashboard/download-credit-log?${qs}`);
+    const blob = await response.blob();
+    const disposition = response.headers.get("Content-Disposition") || "";
+    const match = disposition.match(/filename="(.+)"/);
+    const filename = match?.[1] || `RCLPG_Credit_Log_${Date.now()}.pdf`;
     return { blob, filename };
   },
 };

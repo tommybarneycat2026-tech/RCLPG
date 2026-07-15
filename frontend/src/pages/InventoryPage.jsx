@@ -27,7 +27,41 @@ function healthBadgeClass(indicator) {
   return "bg-emerald-50 text-emerald-700";
 }
 
-function InventoryTable({ products, onEdit, onDelete, isAdmin }) {
+function InventoryTable({
+  products,
+  onEdit,
+  onDelete,
+  onArchive,
+  isAdmin,
+  archiveMode = false,
+}) {
+  const archiveEligibleIds = useMemo(() => {
+    const eligible = new Set();
+    const sorted = [...products].sort(
+      (left, right) =>
+        new Date(left.created_at || 0) - new Date(right.created_at || 0),
+    );
+
+    if (sorted.length <= 1) return eligible;
+
+    const firstPositiveStockIndex = sorted.findIndex(
+      (product) => Number(product.stock_quantity || 0) > 0,
+    );
+
+    if (firstPositiveStockIndex === -1) {
+      sorted.slice(0, sorted.length - 1).forEach((product) => {
+        eligible.add(product.product_id);
+      });
+      return eligible;
+    }
+
+    sorted.slice(0, firstPositiveStockIndex).forEach((product) => {
+      eligible.add(product.product_id);
+    });
+
+    return eligible;
+  }, [products]);
+
   if (!products.length) {
     return (
       <p className="text-xs text-slate-400 italic py-3">
@@ -41,58 +75,84 @@ function InventoryTable({ products, onEdit, onDelete, isAdmin }) {
       <table className="w-full text-left text-xs sm:text-sm whitespace-nowrap">
         <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold uppercase tracking-wider">
           <tr>
-            <th className="p-3">Weight</th>
+            <th className="p-3">Status</th>
             <th className="p-3 text-center">Stock</th>
             <th className="p-3 text-center">Health Status</th>
             {isAdmin && <th className="p-3 text-center">Original Price</th>}
             <th className="p-3 text-center">Consumer Price</th>
             <th className="p-3 text-center">Retail Price</th>
+            <th className="p-3 text-center">Date Created</th>
             {isAdmin && <th className="p-3 text-center">Actions</th>}
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
-          {products.map((p) => (
-            <tr key={p.product_id}>
-              <td className="p-3 font-bold">{p.weight_class}kg</td>
-              <td className="p-3 text-center font-black">{p.stock_quantity}</td>
-              <td className="p-3 text-center">
-                <span
-                  className={`inline-flex px-2.5 py-1 rounded-full text-xs font-black uppercase ${healthBadgeClass(p.health_indicator)}`}
-                >
-                  {p.health_indicator}
-                </span>
-              </td>
-              {isAdmin && (
-                <td className="p-3 text-center text-slate-500">
-                  {formatCurrency(p.initial_price)}
-                </td>
-              )}
-              <td className="p-3 text-center">
-                {formatCurrency(p.regular_retail)}
-              </td>
-              <td className="p-3 text-center text-red-600">
-                {formatCurrency(p.wholesale_price)}
-              </td>
-              {isAdmin && (
-                <td className="p-3 text-center space-x-1">
-                  <button
-                    type="button"
-                    onClick={() => onEdit(p)}
-                    className="text-xs font-bold bg-amber-100 hover:bg-amber-500 hover:text-white px-2.5 py-1 rounded-lg"
+          {products.map((p) => {
+            const isArchiveEligible = archiveEligibleIds.has(p.product_id);
+            return (
+              <tr key={p.product_id}>
+                <td className="p-3">{p.status}</td>
+                <td className="p-3 text-center font-black">{p.stock_quantity}</td>
+                <td className="p-3 text-center">
+                  <span
+                    className={`inline-flex px-2.5 py-1 rounded-full text-xs font-black uppercase ${healthBadgeClass(p.health_indicator)}`}
                   >
-                    Edit
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => onDelete(p)}
-                    className="text-xs font-bold bg-red-50 text-red-600 hover:bg-red-600 hover:text-white px-2.5 py-1 rounded-lg"
-                  >
-                    Delete
-                  </button>
+                    {p.health_indicator}
+                  </span>
                 </td>
-              )}
-            </tr>
-          ))}
+                {isAdmin && (
+                  <td className="p-3 text-center text-slate-500">
+                    {formatCurrency(p.initial_price)}
+                  </td>
+                )}
+                <td className="p-3 text-center">
+                  {formatCurrency(p.regular_retail)}
+                </td>
+                <td className="p-3 text-center text-red-600">
+                  {formatCurrency(p.wholesale_price)}
+                </td>
+                <td className="p-3 text-center">
+                  {new Date(p.created_at).toLocaleDateString()}
+                </td>
+                {isAdmin && (
+                  <td className="p-3 text-center space-x-1">
+                    {!archiveMode && (
+                      <>
+                        {isArchiveEligible ? (
+                          <button
+                            type="button"
+                            onClick={() => onArchive?.(p)}
+                            className="text-xs font-bold bg-indigo-100 hover:bg-indigo-600 hover:text-white px-2.5 py-1 rounded-lg"
+                          >
+                            Add to Archive
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => onEdit(p)}
+                            className="text-xs font-bold bg-amber-100 hover:bg-amber-500 hover:text-white px-2.5 py-1 rounded-lg"
+                          >
+                            Edit
+                          </button>
+                        )}
+                      </>
+                    )}
+                    {archiveMode && (
+                       <>
+                       <button
+                          type="button"
+                          onClick={() => onDelete(p)}
+                          className="text-xs font-bold bg-red-50 text-red-600 hover:bg-red-600 hover:text-white px-2.5 py-1 rounded-lg"
+                        >
+                          Delete
+                      </button>
+                       </>
+                    )}
+                    
+                  </td>     
+                )}
+              </tr>
+            );
+          })}
         </tbody>
       </table>
       <hr />
@@ -113,6 +173,8 @@ export default function InventoryPage() {
   const [form, setForm] = useState(emptyForm);
   const [editProduct, setEditProduct] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [archiveTarget, setArchiveTarget] = useState(null);
+  const [showArchived, setShowArchived] = useState(false);
   const [saving, setSaving] = useState(false);
   const [inventoryRefreshKey, setInventoryRefreshKey] = useState(0);
 
@@ -123,6 +185,7 @@ export default function InventoryPage() {
       if (brandFilter) params.brand = brandFilter;
       if (conditionFilter) params.condition = conditionFilter;
       if (stockTierFilter) params.stockTier = stockTierFilter;
+      if (showArchived) params.includeArchived = "true";
       const [productsRes, brandsRes] = await Promise.all([
         api.getProducts(params),
         api.getBrands(),
@@ -134,7 +197,7 @@ export default function InventoryPage() {
     } finally {
       setLoading(false);
     }
-  }, [brandFilter, conditionFilter, stockTierFilter, showToast]);
+  }, [brandFilter, conditionFilter, stockTierFilter, showArchived, showToast]);
 
   useEffect(() => {
     loadData();
@@ -218,6 +281,70 @@ export default function InventoryPage() {
     } finally {
       setSaving(false);
     }
+  };
+
+  const confirmArchive = async () => {
+    if (!archiveTarget) return;
+    try {
+      setSaving(true);
+      await api.archiveProduct(archiveTarget.product_id);
+      showToast("Archived", "Inventory record moved to Archived Inventory.");
+      setArchiveTarget(null);
+      await loadData();
+      setInventoryRefreshKey((k) => k + 1);
+    } catch (err) {
+      showToast("Archive Failed", err.message, "error");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const renderInventorySection = (title, sectionProducts) => {
+    if (!sectionProducts.length) return null;
+
+    const groupedByWeight = new Map();
+    sectionProducts.forEach((product) => {
+      const key = product.weight_class;
+      const bucket = groupedByWeight.get(key) || [];
+      bucket.push(product);
+      groupedByWeight.set(key, bucket);
+    });
+
+    return (
+      <div className="space-y-4">
+        <div className="border-b border-slate-200 pb-2">
+          <h4 className="text-sm font-black text-slate-700 uppercase tracking-wide">
+            {title}
+          </h4>
+        </div>
+        <div className="space-y-4">
+          {Array.from(groupedByWeight.entries())
+            .sort(([left], [right]) => Number(left) - Number(right))
+            .map(([weightClass, weightProducts]) => (
+              <div
+                key={`${title}-${weightClass}`}
+                className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden"
+              >
+                <div className="border-b border-slate-100 bg-slate-50 px-3 py-2">
+                  <h5 className="text-xs font-bold uppercase text-slate-700 tracking-wider">
+                    Weight - {weightClass} kg
+                  </h5>
+                </div>
+                <div className="p-2 sm:p-3">
+                  <InventoryTable
+                    products={weightProducts}
+                    onEdit={setEditProduct}
+                    onDelete={setDeleteTarget}
+                    onArchive={setArchiveTarget}
+                    isAdmin={isAdministrator}
+                    archiveMode={showArchived}
+                  />
+                </div>
+              </div>
+            ))}
+        </div>
+      </div>
+    );
   };
 
   if (loading && !products.length) return <LoadingSpinner />;
@@ -312,53 +439,55 @@ export default function InventoryPage() {
         </section>
       )}
 
-      {brands.map((brand) => {
-        const { filled, empty } = groupedByBrand[brand];
-        if (!filled.length && !empty.length) return null;
+      <section className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-6">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b border-slate-100 pb-3">
+          <div>
+            <h2 className="text-base font-bold text-slate-900">
+              {showArchived ? "Archived Inventory" : "Inventory Holdings"}
+            </h2>
+            <p className="text-xs text-slate-400">
+              {showArchived
+                ? "Archived records remain in the system until they are permanently deleted."
+                : "Inventory is grouped by weight class so depleted older batches can be archived cleanly."}
+            </p>
+          </div>
+          {isAdministrator && (
+            <button
+              type="button"
+              onClick={() => setShowArchived((value) => !value)}
+              className="self-start sm:self-auto bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs px-4 py-2 rounded-xl"
+            >
+              {showArchived ? "Back to Active" : "Archive"}
+            </button>
+          )}
+        </div>
 
-        return (
-          <section className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-8">
-            <div key={brand} className="space-y-4">
-              <h3 className="text-base font-black text-slate-800 border-l-4 border-red-600 pl-3">
-                {brand} Inventory Holdings
-              </h3>
-              <p className="text-xs text-slate-400">IMPORTANT: WHEN RECORDING A SALE, THE CUSTOMER'S LPG TANK SHOULD BE IN THE INVENTORY HOLDING FOR THE SALES TO GO THROUGH. MAKE SURE TO ADD EMPTY CYLINDERS OF EACH WEIGHT AND BRAND!</p>
-              {filled.length > 0 && (
-                <div className="space-y-2">
-                  <h4 className="text-xs font-bold uppercase text-indigo-600 tracking-wider">
-                    Filled Cylinders
-                  </h4>
-                  <InventoryTable
-                    products={filled}
-                    onEdit={setEditProduct}
-                    onDelete={setDeleteTarget}
-                    isAdmin={isAdministrator}
-                  />
-                </div>
-              )}
-              {empty.length > 0 && (
-                <div className="space-y-2">
-                  <h4 className="text-xs font-bold uppercase text-slate-500 tracking-wider">
-                    Empty Cylinders
-                  </h4>
-                  <InventoryTable
-                    products={empty}
-                    onEdit={setEditProduct}
-                    onDelete={setDeleteTarget}
-                    isAdmin={isAdministrator}
-                  />
-                </div>
-              )}
-              <hr />
+        {brands.map((brand) => {
+          const { filled, empty } = groupedByBrand[brand];
+          if (!filled.length && !empty.length) return null;
+
+          return (
+            <div>
+              <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+                <h3 className="text-base font-black text-slate-800 border-l-4 border-red-600 pl-3">
+                  {brand}
+                </h3>
+                <div className="space-y-4h-2 w-2 rounded-full bg-red-500" />
+              </div>
+              <div className="space-y-8 pt-4">
+                {filled.length > 0 && renderInventorySection("Filled Tank", filled)}
+                {empty.length > 0 && renderInventorySection("Empty Cylinder", empty)}
+              </div>
             </div>
-            {products.length === 0 && (
-              <p className="text-center text-slate-400 py-8">
-                No inventory matches the selected filters.
-              </p>
-            )}
-          </section>
-        );
-      })}
+          );
+        })}
+
+        {products.length === 0 && (
+          <p className="text-center text-slate-400 py-8">
+            No inventory matches the selected filters.
+          </p>
+        )}
+      </section>
 
       {isAdministrator && addModalOpen && (
         <Modal
@@ -466,7 +595,7 @@ export default function InventoryPage() {
                   htmlFor="initial"
                   className="block text-[11px] font-bold uppercase text-slate-500 mb-1"
                 >
-                  Initial Price
+                  Original Price
                 </label>
                 <input
                   id="initial"
@@ -487,7 +616,7 @@ export default function InventoryPage() {
                   htmlFor="retail"
                   className="block text-[11px] font-bold uppercase text-slate-500 mb-1"
                 >
-                  Regular Retail Price
+                  Consumer Price
                 </label>
                 <input
                   id="retail"
@@ -506,7 +635,7 @@ export default function InventoryPage() {
                   htmlFor="wholesale"
                   className="block text-[11px] font-bold uppercase text-slate-500 mb-1"
                 >
-                  Wholesale Price
+                  Retail Price
                 </label>
                 <input
                   id="wholesale"
@@ -665,6 +794,62 @@ export default function InventoryPage() {
                 className="w-full p-2 border rounded-lg"
               />
             </label>
+          </div>
+        </Modal>
+      )}
+
+      {isAdministrator && archiveTarget && (
+        <Modal
+          title="Archive Inventory Record"
+          onClose={() => setArchiveTarget(null)}
+          footer={
+            <>
+              <button
+                type="button"
+                onClick={() => setArchiveTarget(null)}
+                className="px-4 py-2 rounded-xl bg-slate-100 text-sm font-bold"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={saving}
+                onClick={confirmArchive}
+                className="px-4 py-2 rounded-xl bg-indigo-600 text-white text-sm font-bold"
+              >
+                {saving ? "Archiving..." : "Confirm Archive"}
+              </button>
+            </>
+          }
+        >
+          <div className="space-y-2 text-sm text-slate-600">
+            <p>
+              Are you sure you want to archive this inventory record? This action
+              will move the product to the Archived Inventory list and remove it
+              from the active inventory.
+            </p>
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 space-y-1">
+              <p>
+                <strong>Brand:</strong> {archiveTarget.brand}
+              </p>
+              <p>
+                <strong>Weight Class:</strong> {archiveTarget.weight_class}kg
+              </p>
+              <p>
+                <strong>Tank Status:</strong> {archiveTarget.status}
+              </p>
+              <p>
+                <strong>Stock Quantity:</strong> {archiveTarget.stock_quantity}
+              </p>
+              <p>
+                <strong>Date Added:</strong>{" "}
+                {new Date(archiveTarget.created_at).toLocaleDateString("en-PH", {
+                  month: "long",
+                  day: "numeric",
+                  year: "numeric",
+                })}
+              </p>
+            </div>
           </div>
         </Modal>
       )}

@@ -251,6 +251,8 @@ export default function SalesReportSection({ refreshKey = 0 }) {
             { value: "today", label: "Today" },
             { value: "week", label: "This Week" },
             { value: "month", label: "This Month" },
+            { value: "first_half", label: "First Half (Jan–Jun)" },
+            { value: "second_half", label: "Second Half (Jul–Dec)" },
             { value: "year", label: "This Year" },
             { value: "custom", label: "Custom Date Range" },
           ]}

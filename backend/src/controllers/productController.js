@@ -9,12 +9,14 @@ export const listProducts = [
   q("brand").optional({ values: "falsy" }).isString(),
   q("condition").optional({ values: "falsy" }).isIn(["filled", "empty"]),
   q("stockTier").optional({ values: "falsy" }).isIn(["out", "low", "good"]),
+  q("includeArchived").optional().isIn(["true", "false"]),
   asyncHandler(async (req, res) => {
     const products = await productService.listProducts({
       search: req.query.search || "",
       brand: req.query.brand || "",
       condition: req.query.condition || "",
       stockTier: req.query.stockTier || "",
+      includeArchived: req.query.includeArchived === "true",
     });
 
     // Initial (acquisition) price is sensitive cost data — only admins may
@@ -81,6 +83,14 @@ export const updateProduct = [
       wholesalePrice: req.body.wholesalePrice,
       initialPrice: req.body.initialPrice,
     });
+    res.json({ success: true, data: product });
+  }),
+];
+
+export const archiveProduct = [
+  param("productId").notEmpty(),
+  asyncHandler(async (req, res) => {
+    const product = await productService.archiveProduct(req.params.productId);
     res.json({ success: true, data: product });
   }),
 ];

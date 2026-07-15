@@ -22,6 +22,12 @@ router.put(
   ...productController.updateProduct,
   validate,
 );
+router.patch(
+  "/:productId/archive",
+  requireAdministrator,
+  ...productController.archiveProduct,
+  validate,
+);
 router.delete(
   "/:productId",
   requireAdministrator,

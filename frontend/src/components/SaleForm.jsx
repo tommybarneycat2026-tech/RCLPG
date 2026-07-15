@@ -1,14 +1,41 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { Select } from "@mantine/core";
+import { useEffect, useMemo, useState } from "react";
 import { formatCurrency } from "../api/client";
 import { useToast } from "../context/ToastContext";
+import { Select } from "@mantine/core";
+
+
+function formatDateLabel(dateValue) {
+  if (!dateValue) return "Unknown date";
+
+  const parsed = new Date(dateValue);
+  if (Number.isNaN(parsed.getTime())) return "Unknown date";
+
+  return parsed.toLocaleDateString("en-PH", {
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+function formatWeightClassLabel(weightClass) {
+  const normalized = Number(weightClass);
+  const displayValue = Number.isInteger(normalized)
+    ? `${normalized}`
+    : normalized.toFixed(1).replace(/\.0$/, "");
+
+  return `Weight - ${displayValue} kg`;
+}
 
 function productOptionLabel(product) {
-  const statusShort = product.status === "Filled Tank" ? "Filled" : "Empty";
-  let prefix = "";
-  if (product.stock_quantity === 0) prefix = `OUT OF STOCK! ${product.weight_class}kg`;
-  else if (product.health_indicator === "Low Stock") prefix = "LOW ON STOCK! ";
-  return `${prefix}(${product.weight_class}kg [${statusShort}] - Stock: ${product.stock_quantity})`;
+  const createdAtLabel = formatDateLabel(product.created_at);
+
+  if (Number(product.stock_quantity) === 0) {
+    return `OUT OF STOCK! - ${createdAtLabel}`;
+  }
+
+  const isLowStock = product.health_indicator === "Low Stock";
+  const healthLabel = isLowStock ? "LOW!" : "";
+  return `${healthLabel} Stock: ${product.stock_quantity} - Date Added: ${createdAtLabel}`;
 }
 
 export default function SaleForm({
@@ -58,13 +85,64 @@ export default function SaleForm({
 
   const productStatus = isFilled ? "Filled Tank" : "Empty Cylinder";
 
-  const filteredProducts = useMemo(
-    () =>
-      products.filter(
-        (p) => p.status === productStatus && p.brand === brand,
-      ),
-    [products, productStatus, brand],
-  );
+  const filteredProducts = useMemo(() => {
+    const matchedProducts = products.filter(
+      (p) => p.status === productStatus && p.brand === brand,
+    );
+
+    const groupedProducts = new Map();
+    matchedProducts.forEach((product) => {
+      const group = groupedProducts.get(product.weight_class) || [];
+      group.push(product);
+      groupedProducts.set(product.weight_class, group);
+    });
+
+    return Array.from(groupedProducts.entries())
+      .sort(([left], [right]) => Number(left) - Number(right))
+      .flatMap(([, productsForWeight]) => {
+        const sortedProducts = [...productsForWeight].sort(
+          (left, right) =>
+            new Date(left.created_at) - new Date(right.created_at),
+        );
+
+        if (sortedProducts.length === 1) {
+          return sortedProducts;
+        }
+
+        let firstAvailableIndex = -1;
+        for (let index = 0; index < sortedProducts.length; index += 1) {
+          if (Number(sortedProducts[index].stock_quantity) > 0) {
+            firstAvailableIndex = index;
+            break;
+          }
+        }
+
+        if (firstAvailableIndex === -1) {
+          return sortedProducts.slice(-1);
+        }
+
+        return sortedProducts.slice(firstAvailableIndex);
+      });
+  }, [products, productStatus, brand]);
+
+  const groupedProductOptions = useMemo(() => {
+    const grouped = new Map();
+
+    filteredProducts.forEach((product) => {
+      const groupLabel = formatWeightClassLabel(product.weight_class);
+      const groupItems = grouped.get(groupLabel) || [];
+      groupItems.push({
+        value: product.product_id,
+        label: productOptionLabel(product),
+      });
+      grouped.set(groupLabel, groupItems);
+    });
+
+    return Array.from(grouped.entries()).map(([groupLabel, options]) => ({
+      groupLabel,
+      options,
+    }));
+  }, [filteredProducts]);
 
   // Searchable customer list: dedupe by name (case-insensitive) so
   // customers with multiple historical records only appear once, sorted
@@ -379,10 +457,17 @@ export default function SaleForm({
               required
               className="w-full text-xs py-3 px-4 border border-slate-200 bg-white rounded-xl font-mono"
             >
-              {filteredProducts.map((p) => (
-                <option key={p.product_id} value={p.product_id}>
-                  {productOptionLabel(p)}
-                </option>
+              <option value="" disabled>
+                Select a batch
+              </option>
+              {groupedProductOptions.map(({ groupLabel, options }) => (
+                <optgroup key={groupLabel} label={groupLabel}>
+                  {options.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </optgroup>
               ))}
             </select>
           </div>

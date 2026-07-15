@@ -178,7 +178,7 @@ export default function DashboardPage() {
 
       <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4">
         <div className="border-b border-slate-100 pb-3">
-          <h2 className="text-lg font-bold text-slate-900">Daily Expenses</h2>
+          <h2 className="text-lg font-bold text-slate-900">Expenses</h2>
           <p className="text-xs text-slate-400">
             Today&apos;s recorded expenses
           </p>
