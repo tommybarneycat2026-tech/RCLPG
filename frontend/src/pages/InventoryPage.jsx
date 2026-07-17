@@ -467,7 +467,7 @@ export default function InventoryPage() {
           if (!filled.length && !empty.length) return null;
 
           return (
-            <div>
+            <div key={brand}>
               <div className="flex items-center justify-between border-b border-slate-200 pb-2">
                 <h3 className="text-base font-black text-slate-800 border-l-4 border-red-600 pl-3">
                   {brand}
