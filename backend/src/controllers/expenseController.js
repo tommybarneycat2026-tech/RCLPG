@@ -1,6 +1,7 @@
 import { body, param, query as q } from "express-validator";
 import * as expenseService from "../services/expenseService.js";
 import { asyncHandler } from "../middleware/errorHandler.js";
+import { broadcastRealtime } from "../utils/realtime.js";
 
 export const listExpenses = [
   q("todayOnly").optional().isIn(["true", "false"]),
@@ -37,6 +38,7 @@ export const createExpense = [
       amount: req.body.amount,
       date: req.body.date,
     });
+    broadcastRealtime("expenses:changed", { action: "created", expense });
     res.status(201).json({ success: true, data: expense });
   }),
 ];
@@ -59,6 +61,7 @@ export const updateExpense = [
       amount: req.body.amount,
       date: req.body.date,
     });
+    broadcastRealtime("expenses:changed", { action: "updated", expense });
     res.json({ success: true, data: expense });
   }),
 ];
@@ -67,6 +70,7 @@ export const deleteExpense = [
   param("expensesId").isInt().withMessage("Invalid expense id"),
   asyncHandler(async (req, res) => {
     const expense = await expenseService.deleteExpense(req.params.expensesId);
+    broadcastRealtime("expenses:changed", { action: "deleted", expense });
     res.json({ success: true, data: expense });
   }),
 ];

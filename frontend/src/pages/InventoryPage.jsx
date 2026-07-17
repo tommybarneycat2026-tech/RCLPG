@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, formatCurrency } from "../api/client";
 import { useToast } from "../context/ToastContext";
 import { useAuth } from "../context/AuthContext";
+import { subscribeRealtime } from "../utils/realtime";
 import LoadingSpinner from "../components/LoadingSpinner";
 import Modal from "../components/Modal";
 import BrandAutocomplete from "../components/BrandAutocomplete";
@@ -201,6 +202,15 @@ export default function InventoryPage() {
 
   useEffect(() => {
     loadData();
+  }, [loadData]);
+
+  useEffect(() => {
+    const unsubscribe = subscribeRealtime("inventory:changed", () => {
+      loadData();
+      setInventoryRefreshKey((k) => k + 1);
+    });
+
+    return unsubscribe;
   }, [loadData]);
 
   const groupedByBrand = useMemo(() => {

@@ -1,6 +1,7 @@
 import { body, param } from 'express-validator';
 import * as creditService from '../services/creditService.js';
 import { asyncHandler } from '../middleware/errorHandler.js';
+import { broadcastRealtime } from '../utils/realtime.js';
 
 export const listCreditRegister = asyncHandler(async (_req, res) => {
   const data = await creditService.getCreditRegister();
@@ -42,6 +43,7 @@ export const createPayment = [
       req.params.saleId,
       req.body.amount
     );
+    broadcastRealtime('credits:changed', { action: 'payment-recorded', saleId: req.params.saleId, result });
     res.status(201).json({ success: true, data: result });
   }),
 ];

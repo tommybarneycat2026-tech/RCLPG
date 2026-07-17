@@ -1,4 +1,5 @@
 import express from "express";
+import http from "http";
 import cors from "cors";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
@@ -13,8 +14,11 @@ import usersRoutes from "./routes/users.routes.js";
 import creditRoutes from "./routes/credit.routes.js";
 import expenseRoutes from "./routes/expenses.routes.js";
 import brandRoutes from "./routes/brands.routes.js";
+import { createRealtimeServer } from "./utils/realtime.js";
 
 const app = express();
+const server = http.createServer(app);
+createRealtimeServer(server);
 
 app.set("trust proxy", 1);
 
@@ -46,6 +50,6 @@ app.use("/api/brands", brandRoutes);
 app.use(notFound);
 app.use(errorHandler);
 
-app.listen(env.port, () => {
+server.listen(env.port, () => {
   console.log(`RCLPG API listening on port ${env.port}`);
 });

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '../api/client';
 import { useToast } from '../context/ToastContext';
+import { subscribeRealtime } from '../utils/realtime';
 
 const FALLBACK_BRANDS = ['Regasco', 'Seagas', 'Pryce'];
 
@@ -35,6 +36,14 @@ export default function BrandInventoryOverview({ refreshKey = 0 }) {
   useEffect(() => {
     loadData();
   }, [loadData, refreshKey]);
+
+  useEffect(() => {
+    const unsubscribe = subscribeRealtime('inventory:changed', () => {
+      loadData();
+    });
+
+    return unsubscribe;
+  }, [loadData]);
 
   return (
     <section className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4" aria-label="Inventory Brand Overview">

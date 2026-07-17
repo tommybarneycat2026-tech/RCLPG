@@ -2,6 +2,7 @@ import { body, param, query as q } from "express-validator";
 import * as salesService from "../services/salesService.js";
 import { PRICE_TYPES, PAYMENT_METHODS } from "../utils/constants.js";
 import { asyncHandler } from "../middleware/errorHandler.js";
+import { broadcastRealtime } from "../utils/realtime.js";
 
 export const listSales = [
   q("search").optional().isString(),
@@ -65,6 +66,8 @@ export const createSale = [
       lpgTankVariant: req.body.lpgTankVariant,
       purchaseTank: req.body.purchaseTank ?? false,
     });
+    broadcastRealtime("sales:changed", { action: "created", sale });
+    broadcastRealtime("inventory:changed", { action: "stock-updated", resource: "sale", sale });
     res.status(201).json({ success: true, data: sale });
   }),
 ];
@@ -90,6 +93,8 @@ export const updateSale = [
       lpgTankVariant: req.body.lpgTankVariant,
       purchaseTank: req.body.purchaseTank ?? false,
     });
+    broadcastRealtime("sales:changed", { action: "updated", sale });
+    broadcastRealtime("inventory:changed", { action: "stock-updated", resource: "sale", sale });
     res.json({ success: true, data: sale });
   }),
 ];
@@ -98,6 +103,8 @@ export const deleteSale = [
   param("saleId").isUUID(),
   asyncHandler(async (req, res) => {
     const result = await salesService.deleteSale(req.params.saleId);
+    broadcastRealtime("sales:changed", { action: "deleted", sale: result });
+    broadcastRealtime("inventory:changed", { action: "stock-updated", resource: "sale", sale: result });
     res.json({ success: true, data: result });
   }),
 ];

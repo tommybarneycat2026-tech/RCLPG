@@ -9,6 +9,7 @@ import RecordExpenseModal from "../components/RecordExpenseModal";
 import SalesReportSection from "../components/SalesReportSection";
 import BrandInventoryOverview from "../components/BrandInventoryOverview";
 import Modal from "../components/Modal";
+import { subscribeRealtime } from "../utils/realtime";
 
 export default function DashboardPage() {
   const { showToast } = useToast();
@@ -64,6 +65,27 @@ export default function DashboardPage() {
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  useEffect(() => {
+    const unsubscribeInventory = subscribeRealtime("inventory:changed", () => {
+      loadData(pagination.page);
+      setReportRefreshKey((k) => k + 1);
+    });
+    const unsubscribeSales = subscribeRealtime("sales:changed", () => {
+      loadData(pagination.page);
+      setReportRefreshKey((k) => k + 1);
+    });
+    const unsubscribeExpenses = subscribeRealtime("expenses:changed", () => {
+      loadData(pagination.page);
+      setReportRefreshKey((k) => k + 1);
+    });
+
+    return () => {
+      unsubscribeInventory();
+      unsubscribeSales();
+      unsubscribeExpenses();
+    };
+  }, [loadData, pagination.page]);
 
   const handleSaleSuccess = () => {
     loadData(pagination.page);

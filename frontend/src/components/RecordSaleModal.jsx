@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, formatCurrency } from "../api/client";
 import { useToast } from "../context/ToastContext";
+import { subscribeRealtime } from "../utils/realtime";
 import Modal from "./Modal";
 import SaleForm from "./SaleForm";
 
@@ -36,6 +37,22 @@ export default function RecordSaleModal({ open, onClose, onSuccess }) {
   useEffect(() => {
     if (open) loadData();
   }, [open, loadData]);
+
+  useEffect(() => {
+    if (!open) return undefined;
+
+    const unsubscribeInventory = subscribeRealtime("inventory:changed", () => {
+      loadData();
+    });
+    const unsubscribeSales = subscribeRealtime("sales:changed", () => {
+      loadData();
+    });
+
+    return () => {
+      unsubscribeInventory();
+      unsubscribeSales();
+    };
+  }, [loadData, open]);
 
   const brands = useMemo(
     () => [...new Set(products.map((p) => p.brand))],

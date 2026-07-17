@@ -8,6 +8,7 @@ import RecordSaleModal from "../components/RecordSaleModal";
 import RecordExpenseModal from "../components/RecordExpenseModal";
 import DownloadSalesLogModal from "../components/DownloadSalesLogModal";
 import Modal from "../components/Modal";
+import { subscribeRealtime } from "../utils/realtime";
 
 export default function SalesLogPage() {
   const { showToast } = useToast();
@@ -78,6 +79,24 @@ export default function SalesLogPage() {
   useEffect(() => {
     loadExpenses();
   }, [loadExpenses]);
+
+  useEffect(() => {
+    const unsubscribeSales = subscribeRealtime("sales:changed", () => {
+      loadData();
+    });
+    const unsubscribeInventory = subscribeRealtime("inventory:changed", () => {
+      loadData();
+    });
+    const unsubscribeExpenses = subscribeRealtime("expenses:changed", () => {
+      loadExpenses();
+    });
+
+    return () => {
+      unsubscribeSales();
+      unsubscribeInventory();
+      unsubscribeExpenses();
+    };
+  }, [loadData, loadExpenses]);
 
   const brands = [...new Set(products.map((p) => p.brand))];
 

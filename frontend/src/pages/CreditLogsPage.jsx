@@ -4,6 +4,7 @@ import { useToast } from '../context/ToastContext';
 import LoadingSpinner from '../components/LoadingSpinner';
 import Modal from '../components/Modal';
 import DownloadCreditLogModal from '../components/DownloadCreditLogModal';
+import { subscribeRealtime } from '../utils/realtime';
 
 function CreditStatusBadge({ status }) {
   const isPaid = status === 'Paid';
@@ -191,6 +192,20 @@ export default function CreditLogsPage() {
 
   useEffect(() => {
     loadData();
+  }, [loadData]);
+
+  useEffect(() => {
+    const unsubscribeCredits = subscribeRealtime('credits:changed', () => {
+      loadData();
+    });
+    const unsubscribeSales = subscribeRealtime('sales:changed', () => {
+      loadData();
+    });
+
+    return () => {
+      unsubscribeCredits();
+      unsubscribeSales();
+    };
   }, [loadData]);
 
   if (loading && !credits.length) return <LoadingSpinner />;

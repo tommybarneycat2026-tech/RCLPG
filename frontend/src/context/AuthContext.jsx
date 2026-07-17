@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { api, clearSession, getStoredAdmin, getToken, getExpiry, isSessionExpired, saveSession } from '../api/client';
+import { connectRealtime, disconnectRealtime, subscribeRealtime } from '../utils/realtime';
 import { isAdministratorRole } from '../utils/roles';
 
 const AuthContext = createContext(null);
@@ -18,7 +19,21 @@ export function AuthProvider({ children }) {
 
   const logout = () => {
     clearSession();
+    disconnectRealtime();
     setAdmin(null);
+  };
+
+  const refreshAdmin = async () => {
+    const result = await api.me();
+    if (result.admin) {
+      saveSession({
+        token: getToken(),
+        expiresAt: getExpiry(),
+        admin: result.admin,
+      });
+      setAdmin(result.admin);
+    }
+    return result.admin;
   };
 
   useEffect(() => {
@@ -54,6 +69,34 @@ export function AuthProvider({ children }) {
     return () => clearTimeout(timer);
   }, []);
 
+  useEffect(() => {
+    const token = getToken();
+    if (!token || isSessionExpired() || !admin?.adminId) {
+      disconnectRealtime();
+      return undefined;
+    }
+
+    connectRealtime(token);
+
+    const unsubscribeAuth = subscribeRealtime('auth:updated', async (payload) => {
+      if (payload?.adminId && payload.adminId === admin.adminId) {
+        await refreshAdmin();
+      }
+    });
+
+    const unsubscribeSession = subscribeRealtime('auth:session-ended', (payload) => {
+      if (!payload?.adminId || payload.adminId === admin.adminId) {
+        logout();
+        window.location.href = '/login?session-ended=1';
+      }
+    });
+
+    return () => {
+      unsubscribeAuth();
+      unsubscribeSession();
+    };
+  }, [admin?.adminId]);
+
   const value = useMemo(
     () => ({
       admin,
@@ -66,18 +109,7 @@ export function AuthProvider({ children }) {
         setAdmin(result.admin);
         return result;
       },
-      refreshAdmin: async () => {
-        const result = await api.me();
-        if (result.admin) {
-          saveSession({
-            token: getToken(),
-            expiresAt: getExpiry(),
-            admin: result.admin,
-          });
-          setAdmin(result.admin);
-        }
-        return result.admin;
-      },
+      refreshAdmin,
       logout,
     }),
     [admin, loading]

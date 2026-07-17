@@ -8,6 +8,7 @@ import ViewUserModal from '../components/ViewUserModal';
 import AddMemberModal from '../components/AddMemberModal';
 import { isAdministratorRole } from '../utils/roles';
 import { formatRoleLabel } from '../utils/roles';
+import { subscribeRealtime } from '../utils/realtime';
 
 export default function AdminProfilePage() {
   const { refreshAdmin } = useAuth();
@@ -71,6 +72,22 @@ export default function AdminProfilePage() {
   useEffect(() => {
     loadUsers();
   }, [loadUsers]);
+
+  useEffect(() => {
+    const unsubscribeAdmin = subscribeRealtime('admin:changed', () => {
+      loadUsers();
+      loadProfile();
+    });
+    const unsubscribeAuth = subscribeRealtime('auth:updated', () => {
+      loadUsers();
+      loadProfile();
+    });
+
+    return () => {
+      unsubscribeAdmin();
+      unsubscribeAuth();
+    };
+  }, [loadProfile, loadUsers]);
 
   const handleSaveProfile = async () => {
     try {

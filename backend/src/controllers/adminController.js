@@ -2,6 +2,7 @@ import { body, param, query as q } from 'express-validator';
 import * as adminService from '../services/adminService.js';
 import { asyncHandler } from '../middleware/errorHandler.js';
 import { isValidUsername } from '../utils/username.js';
+import { broadcastRealtime } from '../utils/realtime.js';
 
 const usernameValidation = body('username')
   .optional()
@@ -57,6 +58,8 @@ export const updateOwnProfile = [
       phoneNumber: req.body.phoneNumber,
       password: req.body.password,
     });
+    broadcastRealtime('auth:updated', { action: 'profile-updated', adminId: req.admin.adminId, admin: updated });
+    broadcastRealtime('admin:changed', { action: 'updated', admin: updated });
     res.json({ success: true, data: updated });
   }),
 ];
@@ -76,6 +79,8 @@ export const updateUser = [
       phoneNumber: req.body.phoneNumber,
       password: req.body.password,
     });
+    broadcastRealtime('auth:updated', { action: 'profile-updated', adminId: req.params.adminId, admin: updated });
+    broadcastRealtime('admin:changed', { action: 'updated', admin: updated });
     res.json({ success: true, data: updated });
   }),
 ];
@@ -84,6 +89,8 @@ export const archiveUser = [
   param('adminId').isUUID().withMessage('Invalid user ID'),
   asyncHandler(async (req, res) => {
     const updated = await adminService.archiveAdmin(req.params.adminId, req.admin.adminId);
+    broadcastRealtime('auth:updated', { action: 'archived', adminId: req.params.adminId, admin: updated });
+    broadcastRealtime('admin:changed', { action: 'archived', admin: updated });
     res.json({ success: true, data: updated, message: 'User archived successfully' });
   }),
 ];
@@ -103,6 +110,7 @@ export const createUser = [
       role: req.body.role,
       password: req.body.password,
     });
+    broadcastRealtime('admin:changed', { action: 'created', admin: created });
     res.status(201).json({ success: true, data: created, message: 'User created' });
   }),
 ];

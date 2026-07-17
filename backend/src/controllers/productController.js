@@ -3,6 +3,7 @@ import * as productService from "../services/productService.js";
 import { PRODUCT_STATUSES, WEIGHT_CLASSES } from "../utils/constants.js";
 import { asyncHandler } from "../middleware/errorHandler.js";
 import { isAdministratorRole } from "../utils/roles.js";
+import { broadcastRealtime } from "../utils/realtime.js";
 
 export const listProducts = [
   q("search").optional().isString(),
@@ -58,6 +59,7 @@ export const createProduct = [
       wholesalePrice: req.body.wholesalePrice,
       initialPrice: req.body.initialPrice,
     });
+    broadcastRealtime("inventory:changed", { action: "created", resource: "product", product });
     res.status(201).json({ success: true, data: product });
   }),
 ];
@@ -83,6 +85,7 @@ export const updateProduct = [
       wholesalePrice: req.body.wholesalePrice,
       initialPrice: req.body.initialPrice,
     });
+    broadcastRealtime("inventory:changed", { action: "updated", resource: "product", product });
     res.json({ success: true, data: product });
   }),
 ];
@@ -91,6 +94,7 @@ export const archiveProduct = [
   param("productId").notEmpty(),
   asyncHandler(async (req, res) => {
     const product = await productService.archiveProduct(req.params.productId);
+    broadcastRealtime("inventory:changed", { action: "archived", resource: "product", product });
     res.json({ success: true, data: product });
   }),
 ];
@@ -99,6 +103,7 @@ export const deleteProduct = [
   param("productId").notEmpty(),
   asyncHandler(async (req, res) => {
     const product = await productService.deleteProduct(req.params.productId);
+    broadcastRealtime("inventory:changed", { action: "deleted", resource: "product", product });
     res.json({ success: true, data: product });
   }),
 ];
