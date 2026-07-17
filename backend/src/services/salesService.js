@@ -254,6 +254,7 @@ export async function createSale(payload) {
   } finally {
     client.release();
   }
+  console.log("6. Done");
 }
 
 export async function updateSale(saleId, payload) {

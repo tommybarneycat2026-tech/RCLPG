@@ -27,6 +27,7 @@ export default function DashboardPage() {
   const [expenseStartDate, setExpenseStartDate] = useState("");
   const [expenseEndDate, setExpenseEndDate] = useState("");
   const [reportRefreshKey, setReportRefreshKey] = useState(0);
+  const [isLowStockExpanded, setIsLowStockExpanded] = useState(true);
 
   const loadData = useCallback(
     async (page = 1) => {
@@ -103,6 +104,12 @@ export default function DashboardPage() {
   if (loading && !metrics) return <LoadingSpinner />;
 
   const lowStock = metrics?.lowStockProducts || [];
+  const outOfStockCount = lowStock.filter(
+    (item) => item.health_indicator === "Out of Stock",
+  ).length;
+  const lowStockCount = lowStock.filter(
+    (item) => item.health_indicator === "Low Stock",
+  ).length;
 
   return (
     <div className="space-y-6">
@@ -135,40 +142,74 @@ export default function DashboardPage() {
 
       <BrandInventoryOverview refreshKey={reportRefreshKey} />
 
-      {lowStock.length > 0 && (
-        <div
-          className="bg-amber-50 border border-amber-200 rounded-xl p-5 space-y-3 shadow-sm"
-          role="alert"
-        >
-          <h3 className="text-sm font-bold uppercase tracking-wider text-amber-800">
-            Low Stock Reminder
-          </h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 text-xs font-semibold text-amber-900">
-            {lowStock.map((item) => (
-              <div
-                key={item.product_id}
-                className="bg-white p-2.5 rounded-lg border border-amber-200 shadow-sm flex items-center justify-between"
-              >
-                <div>
-                  <span className="font-mono font-bold block text-slate-900">
-                    {item.product_id}
+      <div
+        className="bg-amber-50 border border-amber-200 rounded-xl p-5 shadow-sm"
+        role="alert"
+      >
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <h3 className="text-sm font-bold uppercase tracking-wider text-amber-800">
+              Low Stock Reminder
+            </h3>
+            <div className="flex flex-wrap items-center gap-2">
+              {!isLowStockExpanded && (
+                <>
+                  <span className="rounded-full bg-red-600 px-2.5 py-1 text-[11px] font-black uppercase tracking-wider text-white">
+                    Out of Stock: {outOfStockCount}
                   </span>
-                  <span className="text-slate-500 text-[11px]">
-                    {item.brand} {item.weight_class}kg [
-                    {item.status === "Filled Tank" ? "Filled" : "Empty"}]
+                  <span className="rounded-full bg-amber-500 px-2.5 py-1 text-[11px] font-black uppercase tracking-wider text-white">
+                    Low Stock: {lowStockCount}
+                  </span>
+                </>
+              )}
+              <button
+                type="button"
+                onClick={() => setIsLowStockExpanded((value) => !value)}
+                className="inline-flex items-center gap-2 rounded-lg border border-amber-200 bg-white px-3 py-2 text-xs font-bold text-amber-800 transition hover:bg-amber-100"
+                aria-expanded={isLowStockExpanded}
+                aria-label={
+                  isLowStockExpanded
+                    ? "Collapse low stock reminder"
+                    : "Expand low stock reminder"
+                }
+              >
+                <span>{isLowStockExpanded ? "Collapse" : "Expand"}</span>
+                <span
+                  className={`transition-transform duration-300 ${isLowStockExpanded ? "rotate-180" : ""}`}
+                >
+                  ↓
+                </span>
+              </button>
+            </div>
+          </div>
+          <div
+            className={`overflow-hidden transition-[max-height,opacity] duration-300 ease-in-out ${isLowStockExpanded ? "max-h-[2400px] opacity-100" : "max-h-0 opacity-0"}`}
+          >
+            <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 text-xs font-semibold text-amber-900">
+              {lowStock.map((item) => (
+                <div
+                  key={item.product_id}
+                  className="bg-white p-2.5 rounded-lg border border-amber-200 shadow-sm flex items-center justify-between"
+                >
+                  <div>
+                    <span className="font-mono font-bold block text-slate-900">
+                      {item.brand}
+                    </span>
+                    <span className="text-slate-500 text-[11px]">
+                      {item.weight_class}kg -
+                      {item.status === "Filled Tank" ? " Filled" : " Empty"}
+                    </span>
+                  </div>
+                  <span
+                    className={`px-2 py-1 rounded text-[10px] font-black tracking-wider ${item.health_indicator === "Out of Stock" ? "bg-red-600 text-white" : "bg-amber-600 text-white"}`}
+                  >
+                    {item.health_indicator === "Out of Stock" ? "OUT" : "LOW"} (
+                    {item.stock_quantity})
                   </span>
                 </div>
-                <span
-                  className={`px-2 py-1 rounded text-[10px] font-black tracking-wider ${item.health_indicator === "Out of Stock" ? "bg-red-600 text-white" : "bg-amber-600 text-white"}`}
-                >
-                  {item.health_indicator === "Out of Stock" ? "OUT" : "LOW"} (
-                  {item.stock_quantity})
-                </span>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
         </div>
-      )}
 
       <div className="flex flex-wrap justify-end gap-3">
         <button

@@ -35,7 +35,7 @@ function productOptionLabel(product) {
 
   const isLowStock = product.health_indicator === "Low Stock";
   const healthLabel = isLowStock ? "LOW!" : "";
-  return `${healthLabel} Stock: ${product.stock_quantity} - Date Added: ${createdAtLabel}`;
+  return `${healthLabel} Stock: ${product.stock_quantity} - ${createdAtLabel}`;
 }
 
 export default function SaleForm({
@@ -347,8 +347,8 @@ export default function SaleForm({
             onChange={(e) => setPriceType(e.target.value)}
             className="w-full text-sm py-3 px-4 border border-slate-200 bg-white rounded-xl"
           >
-            <option value="Regular Retail">Regular Retail</option>
-            <option value="Wholesale">Wholesale</option>
+            <option value="Regular Retail">Consumer Price</option>
+            <option value="Wholesale">Retail Price</option>
           </select>
         </div>
 
@@ -496,7 +496,7 @@ export default function SaleForm({
               htmlFor="unit-price"
               className="block text-xs font-bold uppercase text-slate-500 mb-1"
             >
-              Unit Price (Editable)
+              Unit Price
             </label>
             <input
               id="unit-price"

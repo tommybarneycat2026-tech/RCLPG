@@ -20,14 +20,6 @@ function buildStockTierClause(stockTier) {
   return "";
 }
 
-async function ensureArchiveColumns() {
-  await query(`
-    ALTER TABLE lpg_products
-      ADD COLUMN IF NOT EXISTS is_archived BOOLEAN NOT NULL DEFAULT FALSE,
-      ADD COLUMN IF NOT EXISTS archived_at TIMESTAMP WITH TIME ZONE
-  `);
-}
-
 export async function listProducts({
   search = "",
   brand = "",
@@ -35,7 +27,6 @@ export async function listProducts({
   stockTier = "",
   includeArchived = false,
 } = {}) {
-  await ensureArchiveColumns();
   const brandClause = brand ? `AND brand = $3` : "";
   const conditionClause =
     condition === "filled"
@@ -84,7 +75,6 @@ export async function getProductById(productId, client = null) {
 }
 
 export async function createProduct(data) {
-  await ensureArchiveColumns();
   const health = computeHealthIndicator(data.stockQuantity);
   const productId = await generateProductId();
   // Registers the brand in the master brand list if it's new (or reuses the
@@ -150,7 +140,6 @@ export async function updateProduct(productId, data) {
 }
 
 export async function archiveProduct(productId) {
-  await ensureArchiveColumns();
   const existing = await getProductById(productId);
   if (!existing) throw new AppError("Product not found", 404);
 
@@ -206,7 +195,6 @@ export async function adjustStock(productId, delta, client) {
 }
 
 export async function getWeeklyStockSummary() {
-  await ensureArchiveColumns();
   const result = await query(
     `SELECT weight_class,
             SUM(CASE WHEN status = 'Filled Tank' THEN stock_quantity ELSE 0 END)::int AS filled_stock,
@@ -225,7 +213,6 @@ export async function getWeeklyStockSummary() {
 }
 
 export async function getLowStockProducts() {
-  await ensureArchiveColumns();
   const result = await query(
     `SELECT product_id, brand, weight_class, status, stock_quantity, health_indicator
      FROM lpg_products
@@ -240,7 +227,6 @@ export async function getLowStockProducts() {
 }
 
 export async function getInventoryMetrics() {
-  await ensureArchiveColumns();
   const result = await query(
     `SELECT
        COALESCE(SUM(CASE WHEN status = 'Filled Tank' THEN stock_quantity ELSE 0 END), 0)::int AS total_filled,
@@ -252,7 +238,6 @@ export async function getInventoryMetrics() {
 }
 
 export async function findEmptyProduct(brand, weightClass, client = null) {
-  await ensureArchiveColumns();
   const runner = client ? client.query.bind(client) : query;
   const result = await runner(
     `SELECT * FROM lpg_products
@@ -316,7 +301,6 @@ export async function reverseTankSwap(
 }
 
 export async function getBrandInventoryOverview() {
-  await ensureArchiveColumns();
   const result = await query(
     `SELECT brand,
             COALESCE(SUM(CASE WHEN status = 'Filled Tank' THEN stock_quantity ELSE 0 END), 0)::int AS total_filled,
