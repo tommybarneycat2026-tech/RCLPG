@@ -183,7 +183,6 @@ export default function SalesLogPage() {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h2 className="text-lg font-bold text-slate-900">
             Customer & Sales Log
-            Deployment Works?
           </h2>
           {isAdministrator && (
             <button

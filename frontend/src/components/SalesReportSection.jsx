@@ -94,6 +94,25 @@ function ExpensesIcon() {
   );
 }
 
+function CreditBalanceIcon() {
+  return (
+    <svg
+      className="h-5 w-5"
+      fill="none"
+      stroke="currentColor"
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+    >
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="2"
+        d="M3 10h18M7 15h1m4 0h1m4 0h1M7 6h10a2 2 0 012 2v8a2 2 0 01-2 2H7a2 2 0 01-2-2V8a2 2 0 012-2z"
+      />
+    </svg>
+  );
+}
+
 function OrdersIcon() {
   return (
     <svg
@@ -113,7 +132,7 @@ function OrdersIcon() {
   );
 }
 
-function MetricCard({ label, value, icon, tone = "text-slate-900" }) {
+function MetricCard({ label, value, icon, tone = "text-slate-900", formula }) {
   return (
     <Card withBorder padding="lg" radius="md" shadow="sm">
       <Group justify="space-between" align="flex-start" mb="xs">
@@ -130,6 +149,11 @@ function MetricCard({ label, value, icon, tone = "text-slate-900" }) {
       <Text size="xl" fw={800} className={tone}>
         {value}
       </Text>
+      {formula ? (
+        <Text size="xs" c="dimmed" mt={2} className="leading-relaxed">
+          {formula}
+        </Text>
+      ) : null}
     </Card>
   );
 }
@@ -276,18 +300,34 @@ export default function SalesReportSection({ refreshKey = 0 }) {
         </Text>
       ) : (
         <>
-          <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }} spacing="md">
+          <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing="md">
             <MetricCard
               label="Gross Income"
               value={formatCurrency(summary?.grossIncome)}
               icon={<GrossIncomeIcon />}
               tone="text-emerald-600"
+              formula={summary?.grossIncomeFormula}
             />
             <MetricCard
               label="Net Income"
               value={formatCurrency(summary?.netIncome)}
               icon={<NetIncomeIcon />}
               tone="text-indigo-600"
+              formula={summary?.netIncomeFormula}
+            />
+            <MetricCard
+              label="Net Income w/o Credit"
+              value={formatCurrency(summary?.netIncomeWithoutCredit)}
+              icon={<NetIncomeIcon />}
+              tone="text-amber-600"
+              formula={summary?.netIncomeWithoutCreditFormula}
+            />
+            <MetricCard
+              label="Total Credit Balance"
+              value={formatCurrency(summary?.totalCreditBalance)}
+              icon={<CreditBalanceIcon />}
+              tone="text-slate-700"
+              formula={summary?.totalCreditBalanceFormula}
             />
             <MetricCard
               label="Total Expenses"

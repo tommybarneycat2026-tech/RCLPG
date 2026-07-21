@@ -10,6 +10,7 @@ import * as productService from "./productService.js";
 import * as customerService from "./customerService.js";
 import * as creditService from "./creditService.js";
 import * as expenseService from "./expenseService.js";
+import { buildSalesReportSummary } from "./reportSummary.js";
 
 function buildDateFilter(period, startDate, endDate) {
   return buildExportDateFilter(period, startDate, endDate, "sr.date_created");
@@ -591,6 +592,12 @@ export async function getSalesReport({
   const saleBaseFrom = `
     FROM sales_records sr
     JOIN lpg_products p ON p.product_id = sr.product_id
+    LEFT JOIN (
+      SELECT sales_id
+      FROM credit_history
+      WHERE payment_option = 'Credit'
+      GROUP BY sales_id
+    ) credit_sales ON credit_sales.sales_id = sr.sale_id
     WHERE sr.status IN ('Active', 'Finished')
     ${saleWhere}`;
 
@@ -605,6 +612,7 @@ export async function getSalesReport({
     `SELECT
        COALESCE(SUM(sr.total_amount), 0)::numeric AS total_gross_revenue,
        COALESCE(SUM(p.initial_price * sr.sale_quantity), 0)::numeric AS total_cogs,
+       COALESCE(SUM(CASE WHEN credit_sales.sales_id IS NULL THEN p.initial_price * sr.sale_quantity ELSE 0 END), 0)::numeric AS total_fully_paid_cogs,
        COALESCE(SUM(p.weight_class * sr.sale_quantity), 0)::numeric AS total_volume_kg,
        COUNT(*)::int AS total_orders
      ${saleBaseFrom}`,
@@ -621,16 +629,71 @@ export async function getSalesReport({
   const summary = summaryResult.rows[0];
   const totalRevenue = Number(paymentSummaryResult.rows[0].total_gross_revenue);
   const costOfGoodsSold = Number(summary.total_cogs);
+  const totalFullyPaidCostOfGoodsSold = Number(summary.total_fully_paid_cogs);
   const totalOrders = summary.total_orders || 0;
   const totalExpenses = await expenseService.getTotalExpenses({
     quickFilter,
     startDate,
     endDate,
   });
+
+  const fullyPaidSalesResult = await query(
+    `SELECT
+       COALESCE(SUM(sr.total_amount), 0)::numeric AS total_fully_paid_sales
+     FROM sales_records sr
+     LEFT JOIN (
+       SELECT sales_id
+       FROM credit_history
+       WHERE payment_option = 'Credit'
+       GROUP BY sales_id
+     ) credit_sales ON credit_sales.sales_id = sr.sale_id
+     WHERE sr.status IN ('Active', 'Finished')
+       ${saleWhere}
+       AND credit_sales.sales_id IS NULL`,
+    saleParams,
+  );
+
+  const creditBalanceResult = await query(
+    `SELECT
+       COALESCE(SUM(GREATEST(sr.total_amount - COALESCE(pay.total_paid, 0), 0)), 0)::numeric AS total_credit_balance
+     FROM sales_records sr
+     LEFT JOIN (
+       SELECT sales_id, SUM(balance_paid)::numeric AS total_paid
+       FROM credit_history
+       GROUP BY sales_id
+     ) pay ON pay.sales_id = sr.sale_id
+     WHERE sr.status IN ('Active', 'Finished')
+       ${saleWhere}
+       AND EXISTS (
+         SELECT 1
+         FROM credit_history ch
+         WHERE ch.sales_id = sr.sale_id
+           AND ch.payment_option = 'Credit'
+       )
+       AND GREATEST(sr.total_amount - COALESCE(pay.total_paid, 0), 0) > 0`,
+    saleParams,
+  );
+
+  const totalFullyPaidSales = Number(
+    fullyPaidSalesResult.rows[0].total_fully_paid_sales || 0,
+  );
+  const totalCreditBalance = Number(
+    creditBalanceResult.rows[0].total_credit_balance || 0,
+  );
   const grossIncome = totalRevenue;
   const netIncome = Number(
     (grossIncome - costOfGoodsSold - totalExpenses).toFixed(2),
   );
+  const reportSummary = buildSalesReportSummary({
+    totalRevenue: grossIncome,
+    costOfGoodsSold,
+    totalExpenses,
+    totalOrders,
+    totalVolumeKg: Number(summary.total_volume_kg),
+    totalFullyPaidSales,
+    totalFullyPaidCostOfGoodsSold,
+    totalCreditBalance,
+  });
 
   const weightMixResult = await query(
     `SELECT
@@ -725,17 +788,7 @@ export async function getSalesReport({
   return {
     brandMetrics,
     summary: {
-      totalGrossRevenue: totalRevenue,
-      grossIncome,
-      netIncome,
-      totalExpenses,
-      costOfGoodsSold,
-      totalVolumeKg: Number(summary.total_volume_kg),
-      totalOrders,
-      averageOrderValue:
-        totalOrders > 0 ? Number((totalRevenue / totalOrders).toFixed(2)) : 0,
-      netIncomeFormula:
-        "Net Income = Gross Income − Cost of Goods Sold − Total Expenses",
+      ...reportSummary,
     },
     productMix: weightMixResult.rows.map((row) => ({
       weightClass: Number(row.weight_class),
@@ -812,10 +865,16 @@ export async function getDailyMetrics({
   const cogsByDate = await query(
     `SELECT
        ${sqlManilaDate("sr.date_created")} AS date,
-       COALESCE(SUM(p.initial_price * sr.sale_quantity), 0)::numeric AS cogs,
+       COALESCE(SUM(CASE WHEN credit_sales.sales_id IS NULL THEN p.initial_price * sr.sale_quantity ELSE 0 END), 0)::numeric AS cogs,
        COALESCE(SUM(p.weight_class * sr.sale_quantity), 0)::numeric AS volume_kg
      FROM sales_records sr
      JOIN lpg_products p ON p.product_id = sr.product_id
+     LEFT JOIN (
+       SELECT sales_id
+       FROM credit_history
+       WHERE payment_option = 'Credit'
+       GROUP BY sales_id
+     ) credit_sales ON credit_sales.sales_id = sr.sale_id
      WHERE sr.status IN ('Active', 'Finished')
        ${saleWhere}
      GROUP BY ${sqlManilaDate("sr.date_created")}
@@ -985,6 +1044,12 @@ export async function getSalesReportAnalytics(period, startDate, endDate) {
   const saleBaseFrom = `
     FROM sales_records sr
     JOIN lpg_products p ON p.product_id = sr.product_id
+    LEFT JOIN (
+      SELECT sales_id
+      FROM credit_history
+      WHERE payment_option = 'Credit'
+      GROUP BY sales_id
+    ) credit_sales ON credit_sales.sales_id = sr.sale_id
     WHERE sr.status IN ('Active', 'Finished')
     ${saleWhere}`;
 
