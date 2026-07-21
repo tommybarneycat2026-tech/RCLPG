@@ -47,3 +47,22 @@ export const createPayment = [
     res.status(201).json({ success: true, data: result });
   }),
 ];
+
+export const updateCreditPayment = [
+  param('creditId').isUUID(),
+  body('amount').isFloat({ min: 0.01 }).withMessage('Payment amount must be greater than zero'),
+  asyncHandler(async (req, res) => {
+    const result = await creditService.updatePaymentRecord(req.params.creditId, req.body.amount);
+    broadcastRealtime('credits:changed', { action: 'payment-updated', creditId: req.params.creditId, result });
+    res.json({ success: true, data: result });
+  }),
+];
+
+export const deleteCreditPayment = [
+  param('creditId').isUUID(),
+  asyncHandler(async (req, res) => {
+    const result = await creditService.deletePaymentRecord(req.params.creditId);
+    broadcastRealtime('credits:changed', { action: 'payment-deleted', creditId: req.params.creditId, result });
+    res.json({ success: true, data: result });
+  }),
+];

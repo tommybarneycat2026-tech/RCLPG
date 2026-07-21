@@ -16,13 +16,13 @@ export default function BrandAutocomplete({
   placeholder = 'Select or type a brand',
   id,
 }) {
-  const [brands, setBrands] = useState(FALLBACK_BRANDS);
+  const [brands, setBrands] = useState([]);
 
   useEffect(() => {
     api
       .getBrands()
-      .then((res) => setBrands(res.data?.length ? res.data : FALLBACK_BRANDS))
-      .catch(() => setBrands(FALLBACK_BRANDS));
+      .then((res) => setBrands(Array.isArray(res.data) ? res.data : []))
+      .catch(() => setBrands([]));
   }, []);
 
   return (

@@ -1,11 +1,18 @@
 import { query } from '../config/db.js';
 import { AppError } from '../middleware/errorHandler.js';
 
-// Returns every known brand name, alphabetically. This list powers every
-// brand-selection UI in the app (product form, filters, overviews, sale
-// forms) so a brand only ever needs to be created once.
+// Returns the brands that still have active inventory, alphabetically. This
+// keeps every brand-selection UI in the app aligned with the current catalog
+// instead of leaving stale brands behind after the last product is deleted.
 export async function listBrands() {
-  const result = await query(`SELECT name FROM brands ORDER BY name ASC`);
+  const result = await query(`
+    SELECT DISTINCT brand AS name
+    FROM lpg_products
+    WHERE is_archived = FALSE
+      AND brand IS NOT NULL
+      AND TRIM(brand) <> ''
+    ORDER BY brand ASC
+  `);
   return result.rows.map((row) => row.name);
 }
 

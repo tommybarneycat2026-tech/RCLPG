@@ -116,6 +116,13 @@ function InventoryTable({
                 </td>
                 {isAdmin && (
                   <td className="p-3 text-center space-x-1">
+                    <button
+                      type="button"
+                      onClick={() => onDelete?.(p)}
+                      className="text-xs font-bold bg-red-50 text-red-600 hover:bg-red-600 hover:text-white px-2.5 py-1 rounded-lg"
+                    >
+                      Delete
+                    </button>
                     {!archiveMode && (
                       <>
                         {isArchiveEligible ? (
@@ -137,19 +144,7 @@ function InventoryTable({
                         )}
                       </>
                     )}
-                    {archiveMode && (
-                       <>
-                       <button
-                          type="button"
-                          onClick={() => onDelete(p)}
-                          className="text-xs font-bold bg-red-50 text-red-600 hover:bg-red-600 hover:text-white px-2.5 py-1 rounded-lg"
-                        >
-                          Delete
-                      </button>
-                       </>
-                    )}
-                    
-                  </td>     
+                  </td>
                 )}
               </tr>
             );
@@ -165,7 +160,7 @@ export default function InventoryPage() {
   const { showToast } = useToast();
   const { isAdministrator } = useAuth();
   const [products, setProducts] = useState([]);
-  const [brands, setBrands] = useState(FALLBACK_BRANDS);
+  const [brands, setBrands] = useState([]);
   const [brandFilter, setBrandFilter] = useState("");
   const [conditionFilter, setConditionFilter] = useState("");
   const [stockTierFilter, setStockTierFilter] = useState("");
@@ -192,7 +187,7 @@ export default function InventoryPage() {
         api.getBrands(),
       ]);
       setProducts(productsRes.data);
-      setBrands(brandsRes.data?.length ? brandsRes.data : FALLBACK_BRANDS);
+      setBrands(Array.isArray(brandsRes.data) ? brandsRes.data : []);
     } catch (err) {
       showToast("Load Failed", err.message, "error");
     } finally {

@@ -4,6 +4,7 @@ import * as productService from "../services/productService.js";
 import * as reportService from "../services/reportService.js";
 import * as creditService from "../services/creditService.js";
 import { asyncHandler } from "../middleware/errorHandler.js";
+import { toManilaDateISO } from "../utils/timezone.js";
 
 export const getMetrics = asyncHandler(async (_req, res) => {
   // Brand-level sales distribution now lives inside the Sales Report
@@ -111,7 +112,10 @@ export const downloadSalesLog = [
     const { period, startDate, endDate, format } = req.query;
 
     const exportPeriod = period === 'today' ? 'current_day' : period;
-    const rows = await salesService.getReportRows(exportPeriod, startDate, endDate);
+    const rows =
+      format === 'pdf' || !format
+        ? await salesService.getSalesLogPdfRows(exportPeriod, startDate, endDate)
+        : await salesService.getReportRows(exportPeriod, startDate, endDate);
 
     const title = 'RCLPG Customer & Sales Log';
     if (format === 'pdf' || !format) {
@@ -196,14 +200,10 @@ export const downloadCreditLog = [
     // Optionally filter rows by date range if provided
     let filtered = rows;
     if (period === 'daily' && startDate) {
-      filtered = rows.filter((r) => new Date(r.date_created).toISOString().slice(0, 10) === startDate);
+      filtered = rows.filter((r) => toManilaDateISO(r.date_created) === startDate);
     } else if (period === 'monthly' && startDate) {
-      const yr = new Date(startDate).getFullYear();
-      const mo = new Date(startDate).getMonth();
-      filtered = rows.filter((r) => {
-        const d = new Date(r.date_created);
-        return d.getFullYear() === yr && d.getMonth() === mo;
-      });
+      const targetMonth = toManilaDateISO(startDate).slice(0, 7);
+      filtered = rows.filter((r) => toManilaDateISO(r.date_created).slice(0, 7) === targetMonth);
     }
 
     const summary = {

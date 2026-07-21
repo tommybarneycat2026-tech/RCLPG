@@ -3,12 +3,9 @@ import { Autocomplete } from "@mantine/core";
 import { api, formatCurrency } from "../api/client";
 import { useToast } from "../context/ToastContext";
 import Modal from "./Modal";
+import { todayISO } from "../utils/dates";
 
 const DEFAULT_CATEGORIES = ["Truck Gas", "Motor Gas", "Foods", "Gas Refill"];
-
-function todayISO() {
-  return new Date().toISOString().slice(0, 10);
-}
 
 function formatDisplayDate(isoDate) {
   return new Date(isoDate).toLocaleDateString("en-PH", {

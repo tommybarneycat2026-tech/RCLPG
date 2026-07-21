@@ -1,17 +1,20 @@
 import ExcelJS from "exceljs";
 import PDFDocument from "pdfkit";
+import { getManilaTodayISO } from "../utils/timezone.js";
 
 function mapRow(row) {
+  const isPayment = row.entry_type === 'payment';
   return {
-    date: row.date_created,
+    date: row.date_paid || row.date_created,
     customerName: row.customer_name,
-    fbName: row.fb_name || "",
-    phoneNumber: row.phone_number || "",
+    // Facebook profile and phone removed per request
     priceType: row.price_type,
     productSpec: `${row.brand} - ${row.weight_class}kg - ${row.product_status}`,
     quantity: row.sale_quantity,
-    unitPrice: Number(row.unit_price),
-    totalAmount: Number(row.total_amount),
+    unitPrice: isPayment ? Number(row.balance_paid) : Number(row.unit_price),
+    totalAmount: isPayment ? Number(row.balance_paid) : Number(row.total_amount),
+    paymentType: isPayment ? 'Credit Payment' : row.payment_option,
+    balancePaid: isPayment ? Number(row.balance_paid) : null,
     status: row.status,
   };
 }
@@ -109,7 +112,7 @@ export async function buildSalesReportExcelBuffer(
       ? analytics.dailyMetrics
       : [
           {
-            date: new Date().toISOString().slice(0, 10),
+            date: getManilaTodayISO(),
             orders: 0,
             grossIncome: analytics.summary.grossIncome,
             volumeKg: analytics.summary.totalVolumeKg,
@@ -239,8 +242,6 @@ export async function buildSalesLogExcelBuffer(rows, title) {
   sheet.columns = [
     { header: "Log Date", key: "date", width: 14 },
     { header: "Customer Name", key: "customerName", width: 22 },
-    { header: "Facebook Profile", key: "fbName", width: 20 },
-    { header: "Phone Number", key: "phoneNumber", width: 16 },
     { header: "Price Type", key: "priceType", width: 16 },
     { header: "Product Specification", key: "productSpec", width: 28 },
     { header: "Customer LPG Tank", key: "lpgTankVariant", width: 18 },
@@ -258,14 +259,12 @@ export async function buildSalesLogExcelBuffer(rows, title) {
     sheet.addRow({
       date: new Date(row.date_created).toLocaleDateString("en-PH"),
       customerName: row.customer_name,
-      fbName: row.fb_name || "",
-      phoneNumber: row.phone_number || "",
       priceType: row.price_type,
       productSpec: `${row.brand} - ${row.weight_class}kg - ${row.product_status}`,
       lpgTankVariant: row.lpg_tank_variant || "",
       quantity: row.sale_quantity,
-      unitPrice: Number(row.unit_price),
-      totalAmount: Number(row.total_amount),
+      unitPrice: row.entry_type === 'payment' ? Number(row.balance_paid) : Number(row.unit_price),
+      totalAmount: row.entry_type === 'payment' ? Number(row.balance_paid) : Number(row.total_amount),
     });
   });
 
@@ -284,8 +283,6 @@ export async function buildExcelBuffer(rows, title) {
   sheet.addRow([
     "Date",
     "Customer Name",
-    "Facebook Name",
-    "Phone",
     "Price Type",
     "Product",
     "Quantity",
@@ -299,8 +296,6 @@ export async function buildExcelBuffer(rows, title) {
     sheet.addRow([
       mapped.date,
       mapped.customerName,
-      mapped.fbName,
-      mapped.phoneNumber,
       mapped.priceType,
       mapped.productSpec,
       mapped.quantity,
@@ -467,11 +462,21 @@ export async function buildSalesLogPdfBuffer(rows, title, generatedBy) {
   doc.moveDown();
 
   // Table headers
-  const headers = ['Log Date', 'Customer Name', 'FB Profile', 'Phone', 'Price Type', 'Product', 'Qty', 'Unit', 'Total'];
+  const headers = [
+    'Log Date',
+    'Customer Name',
+    'Price Type',
+    'Product',
+    'Qty',
+    'Unit',
+    'Total',
+    'Payment Type',
+    'Balance Paid',
+  ];
 
   const availableWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
   // relative widths (fractions) for columns
-  const rel = [0.10, 0.18, 0.15, 0.12, 0.08, 0.22, 0.05, 0.06, 0.06];
+  const rel = [0.08, 0.20, 0.12, 0.24, 0.06, 0.06, 0.06, 0.10, 0.08];
   const colWidths = rel.map((r) => Math.floor(r * availableWidth));
 
   function renderTableHeader() {
@@ -495,7 +500,17 @@ export async function buildSalesLogPdfBuffer(rows, title, generatedBy) {
     }
     const mapped = mapRow(row);
     let x = doc.page.margins.left;
-    const vals = [new Date(mapped.date).toLocaleDateString('en-PH'), mapped.customerName || '', mapped.fbName || '', mapped.phoneNumber || '', mapped.priceType || '', mapped.productSpec || '', String(mapped.quantity || ''), mapped.unitPrice ? mapped.unitPrice.toFixed(2) : '', mapped.totalAmount ? mapped.totalAmount.toFixed(2) : ''];
+    const vals = [
+      new Date(mapped.date).toLocaleDateString('en-PH'),
+      mapped.customerName || '',
+      mapped.priceType || '',
+      mapped.productSpec || '',
+      String(mapped.quantity || ''),
+      mapped.unitPrice != null ? mapped.unitPrice.toFixed(2) : '',
+      mapped.totalAmount != null ? mapped.totalAmount.toFixed(2) : '',
+      mapped.paymentType || '',
+      mapped.balancePaid != null ? mapped.balancePaid.toFixed(2) : '',
+    ];
     const rowStartY = doc.y;
     // render each cell; allow text to wrap within its width
     vals.forEach((v, i) => {

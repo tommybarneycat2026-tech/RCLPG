@@ -11,6 +11,7 @@ import {
   Title,
 } from "@mantine/core";
 import { DatePickerInput } from "@mantine/dates";
+import { formatDateISO } from "../utils/dates";
 import {
   LineChart,
   Line,
@@ -198,8 +199,8 @@ export default function SalesReportSection({ refreshKey = 0 }) {
       setLoading(true);
       const params = { quickFilter };
       if (quickFilter === "custom" && dateRange[0] && dateRange[1]) {
-        params.startDate = dateRange[0].toISOString().slice(0, 10);
-        params.endDate = dateRange[1].toISOString().slice(0, 10);
+        params.startDate = formatDateISO(dateRange[0]);
+        params.endDate = formatDateISO(dateRange[1]);
       }
       const [reportRes, metricsRes] = await Promise.all([
         api.getSalesReport(params),

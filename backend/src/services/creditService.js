@@ -56,15 +56,25 @@ export async function createInitialCreditRecord(
   }
 
   const paid = Number(initialPayment) || 0;
-  if (paid < 0) throw new AppError('Initial payment cannot be negative', 400);
+
+  if (paid < 0) {
+    throw new AppError('Initial payment cannot be negative', 400);
+  }
+
   if (paid > totalAmount) {
     throw new AppError('Initial payment cannot exceed sale total', 400);
   }
 
   return createPaymentRecord(
-    { saleId, paymentOption: 'Credit', balancePaid: paid },
-    client
-  );
+  {
+    saleId,
+    paymentOption: 'Credit',
+    balancePaid: paid,
+  },
+  client
+);
+
+  return null;
 }
 
 export async function createInstallmentPayment(saleId, amount) {
@@ -102,6 +112,85 @@ export async function createInstallmentPayment(saleId, amount) {
       totalPaid: await getTotalPaid(saleId),
       remainingCredit: await getRemainingCredit(saleId, sale.total_amount),
     };
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+export async function updatePaymentRecord(creditId, amount) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const creditResult = await client.query(
+      `SELECT credit_id, sales_id, balance_paid, payment_option, date_paid FROM credit_history WHERE credit_id = $1`,
+      [creditId]
+    );
+    const credit = creditResult.rows[0];
+    if (!credit) throw new AppError('Payment record not found', 404);
+
+    const paid = Number(amount);
+    if (!Number.isFinite(paid) || paid < 0) {
+      throw new AppError('Payment amount cannot be negative', 400);
+    }
+    if (paid <= 0) {
+      throw new AppError('Payment amount must be greater than zero', 400);
+    }
+
+    const saleResult = await client.query(
+      `SELECT sale_id, total_amount, status FROM sales_records WHERE sale_id = $1`,
+      [credit.sales_id]
+    );
+    const sale = saleResult.rows[0];
+    if (!sale) throw new AppError('Sale not found', 404);
+    if (['Dropped', 'Archived'].includes(sale.status)) {
+      throw new AppError('Cannot update payment for inactive sale', 400);
+    }
+
+    const totalPaid = await getTotalPaid(credit.sales_id, client);
+    const remaining = Number((Number(sale.total_amount) - totalPaid + Number(credit.balance_paid)).toFixed(2));
+    if (paid > remaining) {
+      throw new AppError(`Payment exceeds remaining balance of ${remaining.toFixed(2)}`, 400);
+    }
+
+    const updated = await client.query(
+      `UPDATE credit_history
+       SET balance_paid = $2,
+           date_paid = NOW()
+       WHERE credit_id = $1
+       RETURNING credit_id, sales_id, payment_option, balance_paid, date_paid`,
+      [creditId, paid]
+    );
+
+    await client.query('COMMIT');
+    return updated.rows[0];
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+export async function deletePaymentRecord(creditId) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const creditResult = await client.query(
+      `SELECT credit_id, sales_id FROM credit_history WHERE credit_id = $1`,
+      [creditId]
+    );
+    const credit = creditResult.rows[0];
+    if (!credit) throw new AppError('Payment record not found', 404);
+
+    await client.query(`DELETE FROM credit_history WHERE credit_id = $1`, [creditId]);
+
+    await client.query('COMMIT');
+    return { creditId, deleted: true, saleId: credit.sales_id };
   } catch (err) {
     await client.query('ROLLBACK');
     throw err;

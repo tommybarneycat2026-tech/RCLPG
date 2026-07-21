@@ -39,6 +39,14 @@ function CreditDetailModal({ saleId, readOnly, onClose, onSettled }) {
     loadSummary();
   }, [loadSummary]);
 
+  useEffect(() => {
+    const unsubscribe = subscribeRealtime('credits:changed', () => {
+      loadSummary();
+    });
+
+    return () => unsubscribe();
+  }, [loadSummary]);
+
   const handleSettlementRequest = () => {
     const amount = Number(amountToPay);
     if (!amount || amount <= 0) {

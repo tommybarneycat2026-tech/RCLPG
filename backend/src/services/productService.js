@@ -173,7 +173,20 @@ export async function deleteProduct(productId) {
     [productId],
   );
   if (!result.rows[0]) throw new AppError("Product not found", 404);
-  return result.rows[0];
+
+  const deletedProduct = result.rows[0];
+  if (deletedProduct?.brand) {
+    const remainingBrand = await query(
+      `SELECT 1 FROM lpg_products WHERE LOWER(brand) = LOWER($1) LIMIT 1`,
+      [deletedProduct.brand],
+    );
+
+    if (!remainingBrand.rows[0]) {
+      await query(`DELETE FROM brands WHERE LOWER(name) = LOWER($1)`, [deletedProduct.brand]);
+    }
+  }
+
+  return deletedProduct;
 }
 
 export async function adjustStock(productId, delta, client) {

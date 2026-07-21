@@ -132,6 +132,13 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ amount }),
     }),
+  updateCreditPayment: (creditId, amount) =>
+    request(`/credits/${creditId}`, {
+      method: "PUT",
+      body: JSON.stringify({ amount }),
+    }),
+  deleteCreditPayment: (creditId) =>
+    request(`/credits/${creditId}`, { method: "DELETE" }),
   getExpenses: (params = {}) => {
     const qs = new URLSearchParams(params).toString();
     return request(`/expenses${qs ? `?${qs}` : ""}`);

@@ -69,7 +69,7 @@ export default function SaleForm({
     initialValues?.paymentMethod || "Fully Paid",
   );
   const [initialPayment, setInitialPayment] = useState(
-    initialValues?.initialPayment ?? "",
+    initialValues?.initialPayment ?? "0.00",
   );
   const [brand, setBrand] = useState(initialValues?.brand || brands[0] || "");
   const [isFilled, setIsFilled] = useState(initialValues?.isFilled ?? true);
@@ -371,30 +371,6 @@ export default function SaleForm({
                 <option value="Credit">Credit</option>
               </select>
             </div>
-            {paymentMethod === "Credit" && (
-              <div>
-                <label
-                  htmlFor="initial-payment"
-                  className="block text-xs font-bold uppercase text-slate-500 mb-1"
-                >
-                  Initial Payment{" "}
-                  <span className="font-normal normal-case text-slate-400">
-                    (optional)
-                  </span>
-                </label>
-                <input
-                  id="initial-payment"
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  max={total}
-                  value={initialPayment}
-                  onChange={(e) => setInitialPayment(e.target.value)}
-                  placeholder="0.00"
-                  className="w-full text-sm p-3 border border-slate-200 rounded-xl"
-                />
-              </div>
-            )}
           </div>
         )}
 

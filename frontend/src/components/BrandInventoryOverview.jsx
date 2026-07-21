@@ -12,7 +12,7 @@ const FALLBACK_BRANDS = ['Regasco', 'Seagas', 'Pryce'];
 // trigger an automatic refetch.
 export default function BrandInventoryOverview({ refreshKey = 0 }) {
   const { showToast } = useToast();
-  const [brands, setBrands] = useState(FALLBACK_BRANDS);
+  const [brands, setBrands] = useState([]);
   const [overview, setOverview] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isExpanded, setIsExpanded] = useState(true);
@@ -24,7 +24,7 @@ export default function BrandInventoryOverview({ refreshKey = 0 }) {
         api.getBrands(),
         api.getBrandOverview(),
       ]);
-      setBrands(brandsRes.data?.length ? brandsRes.data : FALLBACK_BRANDS);
+      setBrands(Array.isArray(brandsRes.data) ? brandsRes.data : []);
       setOverview(overviewRes.data);
     } catch (err) {
       showToast('Load Failed', err.message, 'error');

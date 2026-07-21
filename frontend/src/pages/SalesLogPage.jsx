@@ -23,6 +23,9 @@ export default function SalesLogPage() {
   const [loading, setLoading] = useState(true);
   const [selectedSaleId, setSelectedSaleId] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [paymentEditTarget, setPaymentEditTarget] = useState(null);
+  const [paymentDeleteTarget, setPaymentDeleteTarget] = useState(null);
+  const [paymentAmount, setPaymentAmount] = useState("");
   const [saleModalOpen, setSaleModalOpen] = useState(false);
   const [expenseModalOpen, setExpenseModalOpen] = useState(false);
   const [downloadModalOpen, setDownloadModalOpen] = useState(false);
@@ -49,6 +52,7 @@ export default function SalesLogPage() {
         api.getCustomers(),
       ]);
       setSales(salesRes.data);
+      console.log(salesRes.data);
       setProducts(productsRes.data);
       setCustomers(customersRes.data);
     } catch (err) {
@@ -84,6 +88,9 @@ export default function SalesLogPage() {
     const unsubscribeSales = subscribeRealtime("sales:changed", () => {
       loadData();
     });
+    const unsubscribeCredits = subscribeRealtime("credits:changed", () => {
+      loadData();
+    });
     const unsubscribeInventory = subscribeRealtime("inventory:changed", () => {
       loadData();
     });
@@ -93,6 +100,7 @@ export default function SalesLogPage() {
 
     return () => {
       unsubscribeSales();
+      unsubscribeCredits();
       unsubscribeInventory();
       unsubscribeExpenses();
     };
@@ -123,6 +131,42 @@ export default function SalesLogPage() {
       showToast("Transaction Deleted", "Sale removed and stock restored.");
       if (selectedSaleId === deleteTarget.sale_id) setSelectedSaleId(null);
       setDeleteTarget(null);
+      await loadData();
+    } catch (err) {
+      showToast("Delete Failed", err.message, "error");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handlePaymentOverride = async () => {
+    if (!paymentEditTarget) return;
+    const amount = Number(paymentAmount);
+    if (!amount || amount <= 0) {
+      showToast("Invalid Amount", "Enter a valid payment amount.", "error");
+      return;
+    }
+    try {
+      setSaving(true);
+      await api.updateCreditPayment(paymentEditTarget.credit_id, amount);
+      showToast("Payment Updated", "Credit payment updated successfully.");
+      setPaymentEditTarget(null);
+      setPaymentAmount("");
+      await loadData();
+    } catch (err) {
+      showToast("Update Failed", err.message, "error");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const confirmPaymentDelete = async () => {
+    if (!paymentDeleteTarget) return;
+    try {
+      setSaving(true);
+      await api.deleteCreditPayment(paymentDeleteTarget.credit_id);
+      showToast("Payment Deleted", "Credit payment removed successfully.");
+      setPaymentDeleteTarget(null);
       await loadData();
     } catch (err) {
       showToast("Delete Failed", err.message, "error");
@@ -371,67 +415,107 @@ export default function SalesLogPage() {
               <th className="p-3 text-center">Qty</th>
               <th className="p-3 text-right">Unit Price</th>
               <th className="p-3 text-right">Total Billing</th>
+              <th className="p-3 text-center">Payment Type</th>
+              <th className="p-3 text-right">Balance Paid</th>
               {isAdministrator && <th className="p-3 text-center">Actions</th>}
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 font-medium text-slate-600">
-            {sales.map((sale) => (
-              <tr
-                key={sale.sale_id}
-                className={
-                  selectedSaleId === sale.sale_id
-                    ? "bg-red-50"
-                    : "hover:bg-slate-50/80"
-                }
-              >
-                <td className="p-3">
-                  {new Date(sale.date_created).toLocaleDateString("en-PH")}
-                </td>
-                <td className="p-3 font-bold text-slate-800">
-                  {sale.customer_name}
-                </td>
-                <td className="p-3">{sale.price_type}</td>
-                <td className="p-3">
-                  {sale.brand} - {sale.weight_class}kg - {sale.product_status}
-                </td>
-                <td className="p-3 font-semibold text-indigo-700">
-                  {sale.lpg_tank_variant || (
-                    <span className="text-slate-300 italic">-</span>
-                  )}
-                </td>
-                <td className="p-3 text-center font-bold">
-                  {sale.sale_quantity}
-                </td>
-                <td className="p-3 text-right">
-                  {formatCurrency(sale.unit_price)}
-                </td>
-                <td className="p-3 text-right text-red-600 font-extrabold">
-                  {formatCurrency(sale.total_amount)}
-                </td>
-                {isAdministrator && (
-                  <td className="p-3 text-center space-x-1">
-                    <button
-                      type="button"
-                      onClick={() => setSelectedSaleId(sale.sale_id)}
-                      className="text-xs font-bold bg-slate-100 hover:bg-slate-800 hover:text-white px-2 py-1 rounded-lg"
-                    >
-                      Override
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setDeleteTarget(sale)}
-                      className="text-xs font-bold bg-red-50 text-red-600 hover:bg-red-600 hover:text-white px-2 py-1 rounded-lg"
-                    >
-                      Delete
-                    </button>
+            {sales.map((sale) => {
+              const isPayment = sale.entry_type === "payment";
+              return (
+                <tr
+                  key={`${sale.entry_type}-${sale.sale_id}-${sale.log_date}`}
+                  className={
+                    selectedSaleId === sale.sale_id
+                      ? "bg-red-50"
+                      : "hover:bg-slate-50/80"
+                  }
+                >
+                  <td className="p-3">
+                    {new Date(sale.log_date || sale.date_created || sale.date_paid).toLocaleDateString("en-PH")}
                   </td>
-                )}
-              </tr>
-            ))}
+                  <td className="p-3 font-bold text-slate-800">
+                    {sale.customer_name}
+                  </td>
+                  <td className="p-3">
+                    {sale.payment_option}
+                  </td>
+                  <td className="p-3">
+                      {sale.brand} - {sale.weight_class}kg - {sale.product_status}
+                  </td>
+                  <td className="p-3 font-semibold text-indigo-700">
+                      {sale.lpg_tank_variant}
+                  </td>
+                  <td className="p-3 text-center font-bold">
+                    {sale.sale_quantity}
+                  </td>
+                  <td className="p-3 text-right">
+                    {isPayment ? "" : formatCurrency(sale.unit_price)}
+                  </td>
+                  <td className="p-3 text-right text-red-600 font-extrabold">
+                    {isPayment ? formatCurrency(sale.balance_paid || 0) : formatCurrency(sale.total_amount)}
+                  </td>
+                  <td className="p-3 text-center">
+                    {isPayment ? "Credit Payment" : sale.payment_option}
+                  </td>
+                  <td className="p-3 text-right font-semibold text-slate-700">
+                    {formatCurrency(
+                      sale.payment_option === "Fully Paid"
+                        ? sale.total_amount
+                        : sale.balance_paid || 0
+                    )}
+                  </td>
+                  {isAdministrator && (
+                    <td className="p-3 text-center space-x-1">
+                      {!isPayment && (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => setSelectedSaleId(sale.sale_id)}
+                            className="text-xs font-bold bg-slate-100 hover:bg-slate-800 hover:text-white px-2 py-1 rounded-lg"
+                          >
+                            Override
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setDeleteTarget(sale)}
+                            className="text-xs font-bold bg-red-50 text-red-600 hover:bg-red-600 hover:text-white px-2 py-1 rounded-lg"
+                          >
+                            Delete
+                          </button>
+                        </>
+                      )}
+                      {isPayment && (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setPaymentEditTarget(sale);
+                              setPaymentAmount(sale.balance_paid || "");
+                            }}
+                            className="text-xs font-bold bg-slate-100 hover:bg-slate-800 hover:text-white px-2 py-1 rounded-lg"
+                          >
+                            Override
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setPaymentDeleteTarget(sale)}
+                            className="text-xs font-bold bg-red-50 text-red-600 hover:bg-red-600 hover:text-white px-2 py-1 rounded-lg"
+                          >
+                            Delete
+                          </button>
+                        </>
+                      )}
+                    </td>
+                  )}
+                </tr>
+              );
+            })}
             {sales.length === 0 && (
               <tr>
                 <td
-                  colSpan={isAdministrator ? 9 : 8}
+                  colSpan={isAdministrator ? 11 : 10}
                   className="text-center py-8 text-slate-400"
                 >
                   No transactions found.
@@ -470,6 +554,76 @@ export default function SalesLogPage() {
             Permanently delete this sale for{" "}
             <strong>{deleteTarget.customer_name}</strong>? Stock will be
             restored and all payment records will be removed.
+          </p>
+        </Modal>
+      )}
+
+      {isAdministrator && paymentEditTarget && (
+        <Modal
+          title="Override Payment"
+          onClose={() => setPaymentEditTarget(null)}
+          footer={
+            <>
+              <button
+                type="button"
+                onClick={() => setPaymentEditTarget(null)}
+                className="px-4 py-2 rounded-xl bg-slate-100 text-sm font-bold"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={saving}
+                onClick={handlePaymentOverride}
+                className="px-4 py-2 rounded-xl bg-red-600 text-white text-sm font-bold"
+              >
+                {saving ? "Saving..." : "Save Payment"}
+              </button>
+            </>
+          }
+        >
+          <div className="space-y-3">
+            <label className="block text-xs font-bold uppercase text-slate-500">
+              Payment Amount
+            </label>
+            <input
+              type="number"
+              step="0.01"
+              min="0.01"
+              value={paymentAmount}
+              onChange={(e) => setPaymentAmount(e.target.value)}
+              className="w-full text-sm p-3 border border-slate-200 rounded-xl"
+            />
+          </div>
+        </Modal>
+      )}
+
+      {isAdministrator && paymentDeleteTarget && (
+        <Modal
+          title="Delete Payment"
+          onClose={() => setPaymentDeleteTarget(null)}
+          footer={
+            <>
+              <button
+                type="button"
+                onClick={() => setPaymentDeleteTarget(null)}
+                className="px-4 py-2 rounded-xl bg-slate-100 text-sm font-bold"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={saving}
+                onClick={confirmPaymentDelete}
+                className="px-4 py-2 rounded-xl bg-red-600 text-white text-sm font-bold"
+              >
+                Confirm Delete
+              </button>
+            </>
+          }
+        >
+          <p className="text-sm text-slate-600">
+            Delete this payment record for <strong>{paymentDeleteTarget.customer_name}</strong>? The sale itself will remain unchanged and remaining credit will be recalculated.
           </p>
         </Modal>
       )}

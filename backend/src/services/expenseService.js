@@ -5,6 +5,7 @@ import {
   buildReportDateFilter,
   buildExportDateFilter,
 } from "../utils/dateFilters.js";
+import { SQL_TODAY, getManilaTodayISO } from "../utils/timezone.js";
 
 export { DEFAULT_EXPENSE_CATEGORIES };
 
@@ -17,7 +18,7 @@ export async function createExpense({ expenses, amount, date }) {
     throw new AppError("Amount must be a non-negative number", 400);
   }
 
-  const expenseDate = date || new Date().toISOString().slice(0, 10);
+  const expenseDate = date || getManilaTodayISO();
 
   const result = await query(
     `INSERT INTO expenses (expenses, amount, date)
@@ -88,7 +89,7 @@ export async function listExpenses({
   let dateClause = "";
 
   if (todayOnly) {
-    dateClause = "WHERE e.date = CURRENT_DATE";
+    dateClause = `WHERE e.date = ${SQL_TODAY}`;
   } else {
     const { where, params: filterParams } = buildReportDateFilter(
       quickFilter,

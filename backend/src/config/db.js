@@ -1,9 +1,14 @@
 import pg from 'pg';
 import { env } from './env.js';
+import { APP_TIMEZONE } from '../utils/timezone.js';
 
 const pool = new pg.Pool({
   connectionString: env.databaseUrl,
   ssl: env.nodeEnv === 'production' ? { rejectUnauthorized: false } : undefined,
+});
+
+pool.on('connect', (client) => {
+  client.query(`SET timezone = '${APP_TIMEZONE}'`);
 });
 
 pool.on('error', (err) => {

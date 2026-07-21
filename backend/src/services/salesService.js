@@ -5,6 +5,7 @@ import {
   buildReportDateFilter,
   buildExportDateFilter,
 } from "../utils/dateFilters.js";
+import { SQL_TODAY, sqlManilaDate } from "../utils/timezone.js";
 import * as productService from "./productService.js";
 import * as customerService from "./customerService.js";
 import * as creditService from "./creditService.js";
@@ -29,74 +30,232 @@ export async function listSales({
   const offset = (page - 1) * limit;
   const statusFilter = "('Active', 'Finished')";
 
-  let dateClause = "";
-  const params = [search, `%${search}%`];
-  let idx = 3;
+  const buildDateClause = ({ dateColumn, params, index }) => {
+    if (todayOnly) {
+      return {
+        clause: `AND ${sqlManilaDate(dateColumn)} = ${SQL_TODAY}`,
+        params,
+        nextIdx: index,
+      };
+    }
 
-  if (todayOnly) {
-    dateClause = `AND DATE(sr.date_created AT TIME ZONE 'UTC') = CURRENT_DATE`;
-  } else if (period) {
-    const filter = buildDateFilter(period, startDate, endDate);
-    dateClause = filter.where;
-    params.push(...filter.params);
-    idx = filter.nextIdx;
-  } else if (dateFilter) {
-    dateClause = `AND DATE(sr.date_created) = $${idx++}`;
-    params.push(dateFilter);
-  }
+    if (period) {
+      const filter = buildDateFilter(period, startDate, endDate, dateColumn);
+      params.push(...filter.params);
+      return {
+        clause: filter.where,
+        params,
+        nextIdx: filter.nextIdx,
+      };
+    }
 
-  let customerClause = "";
+    if (dateFilter) {
+      params.push(dateFilter);
+      return {
+        clause: `AND ${sqlManilaDate(dateColumn)} = $${index}`,
+        params,
+        nextIdx: index + 1,
+      };
+    }
+
+    return {
+      clause: "",
+      params,
+      nextIdx: index,
+    };
+  };
+
+  const salesParams = [search, `%${search}%`];
+  let salesIdx = 3;
+  const salesDate = buildDateClause({
+    dateColumn: "sr.date_created",
+    params: salesParams,
+    index: salesIdx,
+  });
+  salesIdx = salesDate.nextIdx;
+
+  let salesCustomerClause = "";
   if (customerName) {
-    customerClause = `AND c.name ILIKE $${idx++}`;
-    params.push(`%${customerName}%`);
+    salesCustomerClause = `AND c.name ILIKE $${salesIdx++}`;
+    salesParams.push(`%${customerName}%`);
   }
 
-  let productClause = "";
+  let salesProductClause = "";
   if (productFilter) {
-    productClause = `AND (p.brand ILIKE $${idx} OR CAST(p.weight_class AS text) ILIKE $${idx} OR p.status ILIKE $${idx})`;
-    params.push(`%${productFilter}%`);
-    idx += 1;
+    salesProductClause = `AND (p.brand ILIKE $${salesIdx} OR CAST(p.weight_class AS text) ILIKE $${salesIdx} OR p.status ILIKE $${salesIdx})`;
+    salesParams.push(`%${productFilter}%`);
+    salesIdx += 1;
   }
 
-  const baseWhere = `
+  const salesBaseWhere = `
      WHERE sr.status IN ${statusFilter}
        AND ($1 = '' OR c.name ILIKE $2 OR c.fb_name ILIKE $2 OR c.phone_number ILIKE $2
             OR p.brand ILIKE $2 OR CAST(p.weight_class AS text) ILIKE $2 OR p.status ILIKE $2)
-       ${dateClause}
-       ${customerClause}
-       ${productClause}`;
+       ${salesDate.clause}
+       ${salesCustomerClause}
+       ${salesProductClause}`;
 
-  const countResult = await query(
+  const paymentParams = [search, `%${search}%`];
+  let paymentIdx = 3;
+  const paymentDate = buildDateClause({
+    dateColumn: "ch.date_paid",
+    params: paymentParams,
+    index: paymentIdx,
+  });
+  paymentIdx = paymentDate.nextIdx;
+
+  let paymentCustomerClause = "";
+  if (customerName) {
+    paymentCustomerClause = `AND c.name ILIKE $${paymentIdx++}`;
+    paymentParams.push(`%${customerName}%`);
+  }
+
+  let paymentProductClause = "";
+  if (productFilter) {
+    paymentProductClause = `AND (p.brand ILIKE $${paymentIdx} OR CAST(p.weight_class AS text) ILIKE $${paymentIdx} OR p.status ILIKE $${paymentIdx})`;
+    paymentParams.push(`%${productFilter}%`);
+    paymentIdx += 1;
+  }
+
+  const paymentBaseWhere = `
+     WHERE sr.status IN ${statusFilter}
+       AND ($1 = '' OR c.name ILIKE $2 OR c.fb_name ILIKE $2 OR c.phone_number ILIKE $2
+            OR p.brand ILIKE $2 OR CAST(p.weight_class AS text) ILIKE $2 OR p.status ILIKE $2
+            OR ch.payment_option ILIKE $2 OR CAST(ch.balance_paid AS text) ILIKE $2)
+       ${paymentDate.clause}
+       ${paymentCustomerClause}
+       ${paymentProductClause}`;
+
+  const salesCountResult = await query(
     `SELECT COUNT(*)::int AS total
      FROM sales_records sr
      JOIN customers c ON c.customer_id = sr.customer_id
      JOIN lpg_products p ON p.product_id = sr.product_id
-     ${baseWhere}`,
-    params,
+     ${salesBaseWhere}`,
+    salesParams,
   );
 
-  const dataResult = await query(
-    `SELECT sr.sale_id, sr.customer_id, sr.product_id, sr.status, sr.sale_quantity,
-            sr.price_type, sr.unit_price, sr.total_amount, sr.lpg_tank_variant,
-            sr.date_created, sr.date_updated,
-            c.name AS customer_name, c.fb_name, c.phone_number,
-            p.brand, p.weight_class, p.status AS product_status
-     FROM sales_records sr
-     JOIN customers c ON c.customer_id = sr.customer_id
-     JOIN lpg_products p ON p.product_id = sr.product_id
-     ${baseWhere}
-     ORDER BY sr.date_created DESC
-     LIMIT $${idx} OFFSET $${idx + 1}`,
-    [...params, limit, offset],
+  const paymentCountResult = await query(
+    `SELECT COUNT(*)::int AS total
+    FROM credit_history ch
+    JOIN sales_records sr ON sr.sale_id = ch.sales_id
+    JOIN customers c ON c.customer_id = sr.customer_id
+    JOIN lpg_products p ON p.product_id = sr.product_id
+    ${paymentBaseWhere}
+    AND ch.payment_option = 'Credit'`,
+    paymentParams,
   );
+
+  const salesDataResult = await query(
+  `SELECT
+      sr.sale_id,
+      sr.customer_id,
+      sr.product_id,
+      sr.status,
+      sr.sale_quantity,
+      sr.price_type,
+      sr.unit_price,
+      sr.total_amount,
+      sr.lpg_tank_variant,
+      sr.date_created,
+      sr.date_updated,
+      c.name AS customer_name,
+      c.fb_name,
+      c.phone_number,
+      p.brand,
+      p.weight_class,
+      p.status AS product_status,
+      ch.payment_option,
+      sr.date_created AS log_date,
+      'sale' AS entry_type
+   FROM sales_records sr
+   JOIN customers c ON c.customer_id = sr.customer_id
+   JOIN lpg_products p ON p.product_id = sr.product_id
+   LEFT JOIN (
+    SELECT
+        sales_id,
+        CASE
+            WHEN MAX(CASE WHEN payment_option = 'Credit' THEN 1 ELSE 0 END) = 1
+                THEN 'Credit'
+            ELSE 'Fully Paid'
+        END AS payment_option
+    FROM credit_history
+    GROUP BY sales_id
+) ch ON ch.sales_id = sr.sale_id  
+   ${salesBaseWhere}
+   ORDER BY sr.date_created DESC`,
+  salesParams,
+  );
+
+  const paymentDataResult = await query(
+    `SELECT
+      ch.credit_id,
+      ch.sales_id AS sale_id,
+      ch.payment_option,
+      ch.balance_paid,
+      ch.date_paid,
+      sr.customer_id,
+      sr.product_id,
+      sr.status,
+      sr.sale_quantity,
+      sr.price_type,
+      sr.unit_price,
+      sr.total_amount,
+      sr.lpg_tank_variant,
+      sr.date_created,
+      sr.date_updated,
+      c.name AS customer_name,
+      c.fb_name,
+      c.phone_number,
+      p.brand,
+      p.weight_class,
+      p.status AS product_status,
+      ch.date_paid AS log_date,
+      'payment' AS entry_type
+    FROM credit_history ch
+    JOIN sales_records sr ON sr.sale_id = ch.sales_id
+    JOIN customers c ON c.customer_id = sr.customer_id
+    JOIN lpg_products p ON p.product_id = sr.product_id
+    ${paymentBaseWhere}
+    AND ch.payment_option = 'Credit'
+    AND COALESCE(ch.balance_paid, 0) > 0
+    ORDER BY ch.date_paid DESC`,
+    paymentParams,
+  );
+
+  const paymentMap = new Map();
+
+  paymentDataResult.rows.forEach((row) => {
+    paymentMap.set(row.sale_id, row);
+  });
+
+  const combinedRows = [...salesDataResult.rows, ...paymentDataResult.rows]
+  
+    .map((row) => ({
+      ...row,
+      
+      sale_quantity: row.sale_quantity ? Number(row.sale_quantity) : null,
+      unit_price: Number(row.unit_price),
+      total_amount: Number(row.total_amount),
+      balance_paid: row.balance_paid ? Number(row.balance_paid) : null,
+      weight_class: Number(row.weight_class),
+      log_date: row.log_date || row.date_created || row.date_paid,
+    }))
+    .sort((left, right) => {
+      const leftDate = new Date(left.log_date || 0).getTime();
+      const rightDate = new Date(right.log_date || 0).getTime();
+      if (rightDate !== leftDate) return rightDate - leftDate;
+      return String(left.sale_id).localeCompare(String(right.sale_id));
+    });
+  const pagedRows = combinedRows.slice(offset, offset + limit);
 
   return {
-    data: dataResult.rows,
+    data: pagedRows,
     pagination: {
       page,
       limit,
-      total: countResult.rows[0].total,
-      totalPages: Math.ceil(countResult.rows[0].total / limit) || 1,
+      total: salesCountResult.rows[0].total + paymentCountResult.rows[0].total,
+      totalPages: Math.ceil((salesCountResult.rows[0].total + paymentCountResult.rows[0].total) / limit) || 1,
     },
   };
 }
@@ -356,10 +515,15 @@ export async function deleteSale(saleId) {
 export async function getDashboardSalesMetrics() {
   const result = await query(
     `SELECT
-       COALESCE(SUM(sale_quantity), 0)::int AS total_items_sold,
-       COALESCE(SUM(total_amount), 0)::numeric AS total_revenue
-     FROM sales_records
-     WHERE status IN ('Active', 'Finished')`,
+       COALESCE(SUM(sr.sale_quantity), 0)::int AS total_items_sold,
+       COALESCE(SUM(pay.total_paid), 0)::numeric AS total_revenue
+     FROM sales_records sr
+     LEFT JOIN (
+       SELECT sales_id, SUM(balance_paid)::numeric AS total_paid
+       FROM credit_history
+       GROUP BY sales_id
+     ) pay ON pay.sales_id = sr.sale_id
+     WHERE sr.status IN ('Active', 'Finished')`,
   );
   return result.rows[0];
 }
@@ -406,17 +570,36 @@ export async function getSalesReport({
   startDate,
   endDate,
 } = {}) {
-  const { where, params } = buildReportDateFilter(
+  const saleFilter = buildReportDateFilter(
     quickFilter,
     startDate,
     endDate,
     "sr.date_created",
   );
-  const baseFrom = `
+  const paymentFilter = buildReportDateFilter(
+    quickFilter,
+    startDate,
+    endDate,
+    "ch.date_paid",
+  );
+
+  const saleWhere = saleFilter.where;
+  const saleParams = saleFilter.params;
+  const paymentWhere = paymentFilter.where;
+  const paymentParams = paymentFilter.params;
+
+  const saleBaseFrom = `
     FROM sales_records sr
     JOIN lpg_products p ON p.product_id = sr.product_id
     WHERE sr.status IN ('Active', 'Finished')
-    ${where}`;
+    ${saleWhere}`;
+
+  const paymentBaseFrom = `
+    FROM credit_history ch
+    JOIN sales_records sr ON sr.sale_id = ch.sales_id
+    JOIN lpg_products p ON p.product_id = sr.product_id
+    WHERE sr.status IN ('Active', 'Finished')
+    ${paymentWhere}`;
 
   const summaryResult = await query(
     `SELECT
@@ -424,14 +607,19 @@ export async function getSalesReport({
        COALESCE(SUM(p.initial_price * sr.sale_quantity), 0)::numeric AS total_cogs,
        COALESCE(SUM(p.weight_class * sr.sale_quantity), 0)::numeric AS total_volume_kg,
        COUNT(*)::int AS total_orders
-     ${baseFrom}`,
-    params,
+     ${saleBaseFrom}`,
+    saleParams,
+  );
+
+  const paymentSummaryResult = await query(
+    `SELECT
+       COALESCE(SUM(ch.balance_paid), 0)::numeric AS total_gross_revenue
+     ${paymentBaseFrom}`,
+    paymentParams,
   );
 
   const summary = summaryResult.rows[0];
-  const totalRevenue = Number(summary.total_gross_revenue);
-  // Cost of Goods Sold (COGS): acquisition cost of every unit sold,
-  // sourced from lpg_products.initial_price.
+  const totalRevenue = Number(paymentSummaryResult.rows[0].total_gross_revenue);
   const costOfGoodsSold = Number(summary.total_cogs);
   const totalOrders = summary.total_orders || 0;
   const totalExpenses = await expenseService.getTotalExpenses({
@@ -440,7 +628,6 @@ export async function getSalesReport({
     endDate,
   });
   const grossIncome = totalRevenue;
-  // Net Income = Total Sales Revenue − Cost of Goods Sold − Total Expenses
   const netIncome = Number(
     (grossIncome - costOfGoodsSold - totalExpenses).toFixed(2),
   );
@@ -449,11 +636,11 @@ export async function getSalesReport({
     `SELECT
        p.weight_class,
        COALESCE(SUM(sr.sale_quantity), 0)::int AS units_sold,
-       COALESCE(SUM(sr.total_amount), 0)::numeric AS revenue
-     ${baseFrom}
+       COALESCE(SUM(ch.balance_paid), 0)::numeric AS revenue
+     ${paymentBaseFrom}
      GROUP BY p.weight_class
      ORDER BY p.weight_class ASC`,
-    params,
+    paymentParams,
   );
 
   const totalUnits =
@@ -461,36 +648,33 @@ export async function getSalesReport({
 
   const revenueBreakdownResult = await query(
     `SELECT
-       COALESCE(SUM(CASE WHEN p.status = 'Filled Tank' THEN sr.total_amount ELSE 0 END), 0)::numeric AS gas_refill_revenue,
-       COALESCE(SUM(CASE WHEN p.status = 'Empty Cylinder' THEN sr.total_amount ELSE 0 END), 0)::numeric AS new_cylinder_revenue
-     ${baseFrom}`,
-    params,
+       COALESCE(SUM(CASE WHEN p.status = 'Filled Tank' THEN ch.balance_paid ELSE 0 END), 0)::numeric AS gas_refill_revenue,
+       COALESCE(SUM(CASE WHEN p.status = 'Empty Cylinder' THEN ch.balance_paid ELSE 0 END), 0)::numeric AS new_cylinder_revenue
+     ${paymentBaseFrom}`,
+    paymentParams,
   );
 
   const customerTypeResult = await query(
     `SELECT
        sr.price_type,
-       COUNT(*)::int AS order_count,
-       COALESCE(SUM(sr.total_amount), 0)::numeric AS revenue
-     ${baseFrom}
+       COUNT(DISTINCT sr.sale_id)::int AS order_count,
+       COALESCE(SUM(ch.balance_paid), 0)::numeric AS revenue
+     ${paymentBaseFrom}
      GROUP BY sr.price_type`,
-    params,
+    paymentParams,
   );
 
   const paymentResult = await query(
     `SELECT
        CASE
-         WHEN EXISTS (
-           SELECT 1 FROM credit_history ch
-           WHERE ch.sales_id = sr.sale_id AND ch.payment_option = 'Credit'
-         ) THEN 'Invoice / Credit'
+         WHEN ch.payment_option = 'Credit' THEN 'Invoice / Credit'
          ELSE 'Cash'
        END AS payment_method,
        COUNT(*)::int AS transaction_count,
-       COALESCE(SUM(sr.total_amount), 0)::numeric AS revenue
-     ${baseFrom}
+       COALESCE(SUM(ch.balance_paid), 0)::numeric AS revenue
+     ${paymentBaseFrom}
      GROUP BY 1`,
-    params,
+    paymentParams,
   );
 
   const mapSegments = (rows, totalRev, labelKey) =>
@@ -593,29 +777,50 @@ export async function getDailyMetrics({
   startDate,
   endDate,
 } = {}) {
-  const { where, params } = buildReportDateFilter(
+  const saleFilter = buildReportDateFilter(
     quickFilter,
     startDate,
     endDate,
     "sr.date_created",
   );
-  const baseFrom = `
-    FROM sales_records sr
-    JOIN lpg_products p ON p.product_id = sr.product_id
-    WHERE sr.status IN ('Active', 'Finished')
-    ${where}`;
+  const paymentFilter = buildReportDateFilter(
+    quickFilter,
+    startDate,
+    endDate,
+    "ch.date_paid",
+  );
 
-  const dailyResult = await query(
+  const paymentWhere = paymentFilter.where;
+  const paymentParams = paymentFilter.params;
+  const saleWhere = saleFilter.where;
+  const saleParams = saleFilter.params;
+
+  const dailyPayments = await query(
     `SELECT
-       DATE(sr.date_created AT TIME ZONE 'UTC')::date AS date,
+       ${sqlManilaDate("ch.date_paid")} AS date,
        COUNT(*)::int AS orders,
-       COALESCE(SUM(sr.total_amount), 0)::numeric AS gross_income,
+       COALESCE(SUM(ch.balance_paid), 0)::numeric AS gross_income
+     FROM credit_history ch
+     JOIN sales_records sr ON sr.sale_id = ch.sales_id
+     WHERE sr.status IN ('Active', 'Finished')
+       ${paymentWhere}
+     GROUP BY ${sqlManilaDate("ch.date_paid")}
+     ORDER BY ${sqlManilaDate("ch.date_paid")} ASC`,
+    paymentParams,
+  );
+
+  const cogsByDate = await query(
+    `SELECT
+       ${sqlManilaDate("sr.date_created")} AS date,
        COALESCE(SUM(p.initial_price * sr.sale_quantity), 0)::numeric AS cogs,
        COALESCE(SUM(p.weight_class * sr.sale_quantity), 0)::numeric AS volume_kg
-     ${baseFrom}
-     GROUP BY DATE(sr.date_created AT TIME ZONE 'UTC')
-     ORDER BY DATE(sr.date_created AT TIME ZONE 'UTC') ASC`,
-    params,
+     FROM sales_records sr
+     JOIN lpg_products p ON p.product_id = sr.product_id
+     WHERE sr.status IN ('Active', 'Finished')
+       ${saleWhere}
+     GROUP BY ${sqlManilaDate("sr.date_created")}
+     ORDER BY ${sqlManilaDate("sr.date_created")} ASC`,
+    saleParams,
   );
 
   const expenseByDate = await expenseService.getDailyExpenseTotals({
@@ -627,22 +832,39 @@ export async function getDailyMetrics({
     expenseByDate.map((row) => [String(row.date), row.totalExpenses]),
   );
 
-  return dailyResult.rows.map((row) => {
-    const grossIncome = Number(row.gross_income);
-    const costOfGoodsSold = Number(row.cogs);
-    const dailyExpenses = expenseMap.get(String(row.date)) || 0;
-    return {
-      date: row.date,
-      orders: row.orders,
-      grossIncome,
-      costOfGoodsSold,
-      volumeKg: Number(row.volume_kg),
-      totalExpenses: dailyExpenses,
-      netIncome: Number(
-        (grossIncome - costOfGoodsSold - dailyExpenses).toFixed(2),
-      ),
-    };
-  });
+  const paymentMap = new Map(
+    dailyPayments.rows.map((row) => [String(row.date), row]),
+  );
+  const cogsMap = new Map(
+    cogsByDate.rows.map((row) => [String(row.date), row]),
+  );
+
+  const allDates = new Set([
+    ...dailyPayments.rows.map((row) => String(row.date)),
+    ...cogsByDate.rows.map((row) => String(row.date)),
+    ...expenseByDate.map((row) => String(row.date)),
+  ]);
+
+  return Array.from(allDates)
+    .sort((a, b) => new Date(a) - new Date(b))
+    .map((date) => {
+      const payment = paymentMap.get(date) || { orders: 0, gross_income: 0 };
+      const cogs = cogsMap.get(date) || { cogs: 0, volume_kg: 0 };
+      const dailyExpenses = expenseMap.get(date) || 0;
+      const grossIncome = Number(payment.gross_income);
+      const costOfGoodsSold = Number(cogs.cogs);
+      return {
+        date,
+        orders: payment.orders,
+        grossIncome,
+        costOfGoodsSold,
+        volumeKg: Number(cogs.volume_kg),
+        totalExpenses: dailyExpenses,
+        netIncome: Number(
+          (grossIncome - (costOfGoodsSold - dailyExpenses)).toFixed(2),
+        ),
+      };
+    });
 }
 
 export async function getReportRows(period, startDate, endDate) {
@@ -663,6 +885,89 @@ export async function getReportRows(period, startDate, endDate) {
   return result.rows;
 }
 
+export async function getSalesLogPdfRows(period, startDate, endDate) {
+  const saleFilter = buildExportDateFilter(period, startDate, endDate, 'sr.date_created');
+  const paymentFilter = buildExportDateFilter(period, startDate, endDate, 'ch.date_paid');
+
+  const saleSql = `
+    SELECT
+      sr.sale_id,
+      sr.date_created,
+      NULL::timestamp AS date_paid,
+      sr.status,
+      sr.sale_quantity,
+      sr.price_type,
+      sr.unit_price,
+      sr.total_amount,
+      sr.lpg_tank_variant,
+      c.name AS customer_name,
+      c.fb_name,
+      c.phone_number,
+      p.brand,
+      p.weight_class,
+      p.status AS product_status,
+      COALESCE(sale_payment.payment_option, 'Fully Paid') AS payment_option,
+      NULL::numeric AS balance_paid,
+      'sale' AS entry_type,
+      ${sqlManilaDate('sr.date_created')} AS log_date
+    FROM sales_records sr
+    JOIN customers c ON c.customer_id = sr.customer_id
+    JOIN lpg_products p ON p.product_id = sr.product_id
+    LEFT JOIN (
+      SELECT sales_id,
+        CASE
+          WHEN MAX(CASE WHEN payment_option = 'Credit' THEN 1 ELSE 0 END) = 1 THEN 'Credit'
+          ELSE 'Fully Paid'
+        END AS payment_option
+      FROM credit_history
+      GROUP BY sales_id
+    ) sale_payment ON sale_payment.sales_id = sr.sale_id
+    WHERE sr.status IN ('Active', 'Finished', 'Dropped', 'Archived')
+      ${saleFilter.where}
+  `;
+
+  const paymentSql = `
+    SELECT
+      sr.sale_id,
+      sr.date_created,
+      ch.date_paid,
+      sr.status,
+      sr.sale_quantity,
+      sr.price_type,
+      sr.unit_price,
+      sr.total_amount,
+      sr.lpg_tank_variant,
+      c.name AS customer_name,
+      c.fb_name,
+      c.phone_number,
+      p.brand,
+      p.weight_class,
+      p.status AS product_status,
+      'Credit Payment' AS payment_option,
+      ch.balance_paid,
+      'payment' AS entry_type,
+      ${sqlManilaDate('ch.date_paid')} AS log_date
+    FROM credit_history ch
+    JOIN sales_records sr ON sr.sale_id = ch.sales_id
+    JOIN customers c ON c.customer_id = sr.customer_id
+    JOIN lpg_products p ON p.product_id = sr.product_id
+    WHERE sr.status IN ('Active', 'Finished', 'Dropped', 'Archived')
+      ${paymentFilter.where}
+      AND ch.payment_option = 'Credit'
+      AND COALESCE(ch.balance_paid, 0) > 0
+  `;
+
+  const result = await query(
+    `${saleSql}
+     UNION ALL
+     ${paymentSql}
+     ORDER BY log_date DESC`,
+    [...saleFilter.params, ...paymentFilter.params],
+  );
+
+  return result.rows;
+}
+
 function normalizeExportPeriod(period) {
   if (period === "today") return "current_day";
   return period;
@@ -670,12 +975,25 @@ function normalizeExportPeriod(period) {
 
 export async function getSalesReportAnalytics(period, startDate, endDate) {
   const exportPeriod = normalizeExportPeriod(period);
-  const { where, params } = buildDateFilter(exportPeriod, startDate, endDate);
-  const baseFrom = `
+  const saleFilter = buildDateFilter(exportPeriod, startDate, endDate, "sr.date_created");
+  const paymentFilter = buildDateFilter(exportPeriod, startDate, endDate, "ch.date_paid");
+  const saleWhere = saleFilter.where;
+  const saleParams = saleFilter.params;
+  const paymentWhere = paymentFilter.where;
+  const paymentParams = paymentFilter.params;
+
+  const saleBaseFrom = `
     FROM sales_records sr
     JOIN lpg_products p ON p.product_id = sr.product_id
     WHERE sr.status IN ('Active', 'Finished')
-    ${where}`;
+    ${saleWhere}`;
+
+  const paymentBaseFrom = `
+    FROM credit_history ch
+    JOIN sales_records sr ON sr.sale_id = ch.sales_id
+    JOIN lpg_products p ON p.product_id = sr.product_id
+    WHERE sr.status IN ('Active', 'Finished')
+    ${paymentWhere}`;
 
   const summaryResult = await query(
     `SELECT
@@ -683,12 +1001,19 @@ export async function getSalesReportAnalytics(period, startDate, endDate) {
        COALESCE(SUM(p.initial_price * sr.sale_quantity), 0)::numeric AS total_cogs,
        COALESCE(SUM(p.weight_class * sr.sale_quantity), 0)::numeric AS total_volume_kg,
        COUNT(*)::int AS total_orders
-     ${baseFrom}`,
-    params,
+     ${saleBaseFrom}`,
+    saleParams,
+  );
+
+  const paymentSummaryResult = await query(
+    `SELECT
+       COALESCE(SUM(ch.balance_paid), 0)::numeric AS total_gross_revenue
+     ${paymentBaseFrom}`,
+    paymentParams,
   );
 
   const summary = summaryResult.rows[0];
-  const grossIncome = Number(summary.total_gross_revenue);
+  const grossIncome = Number(paymentSummaryResult.rows[0].total_gross_revenue);
   const costOfGoodsSold = Number(summary.total_cogs);
   const totalOrders = summary.total_orders || 0;
   const totalVolumeKg = Number(summary.total_volume_kg);
@@ -697,22 +1022,30 @@ export async function getSalesReportAnalytics(period, startDate, endDate) {
     startDate,
     endDate,
   );
-  // Net Income = Total Sales Revenue − Cost of Goods Sold − Total Expenses
   const netIncome = Number(
     (grossIncome - costOfGoodsSold - totalExpenses).toFixed(2),
   );
 
-  const dailySalesResult = await query(
+  const dailyPaymentsResult = await query(
     `SELECT
-       DATE(sr.date_created AT TIME ZONE 'UTC')::date AS date,
+       ${sqlManilaDate("ch.date_paid")} AS date,
        COUNT(*)::int AS orders,
-       COALESCE(SUM(sr.total_amount), 0)::numeric AS gross_income,
+       COALESCE(SUM(ch.balance_paid), 0)::numeric AS gross_income
+     ${paymentBaseFrom}
+     GROUP BY ${sqlManilaDate("ch.date_paid")}
+     ORDER BY ${sqlManilaDate("ch.date_paid")} ASC`,
+    paymentParams,
+  );
+
+  const cogsByDate = await query(
+    `SELECT
+       ${sqlManilaDate("sr.date_created")} AS date,
        COALESCE(SUM(p.initial_price * sr.sale_quantity), 0)::numeric AS cogs,
        COALESCE(SUM(p.weight_class * sr.sale_quantity), 0)::numeric AS volume_kg
-     ${baseFrom}
-     GROUP BY DATE(sr.date_created AT TIME ZONE 'UTC')
-     ORDER BY DATE(sr.date_created AT TIME ZONE 'UTC') ASC`,
-    params,
+     ${saleBaseFrom}
+     GROUP BY ${sqlManilaDate("sr.date_created")}
+     ORDER BY ${sqlManilaDate("sr.date_created")} ASC`,
+    saleParams,
   );
 
   const expenseByDate = await expenseService.getDailyExpenseTotalsForExport(
@@ -724,19 +1057,36 @@ export async function getSalesReportAnalytics(period, startDate, endDate) {
     expenseByDate.map((row) => [String(row.date), row.totalExpenses]),
   );
 
-  const dailyMetrics = dailySalesResult.rows.map((row) => {
-    const dayGross = Number(row.gross_income);
-    const dayCogs = Number(row.cogs);
-    const dayExpenses = expenseMap.get(String(row.date)) || 0;
-    return {
-      date: row.date,
-      orders: row.orders,
-      grossIncome: dayGross,
-      volumeKg: Number(row.volume_kg),
-      totalExpenses: dayExpenses,
-      netIncome: Number((dayGross - dayCogs - dayExpenses).toFixed(2)),
-    };
-  });
+  const paymentMap = new Map(
+    dailyPaymentsResult.rows.map((row) => [String(row.date), row]),
+  );
+  const cogsMap = new Map(
+    cogsByDate.rows.map((row) => [String(row.date), row]),
+  );
+
+  const allDates = new Set([
+    ...dailyPaymentsResult.rows.map((row) => String(row.date)),
+    ...cogsByDate.rows.map((row) => String(row.date)),
+    ...expenseByDate.map((row) => String(row.date)),
+  ]);
+
+  const dailyMetrics = Array.from(allDates)
+    .sort((a, b) => new Date(a) - new Date(b))
+    .map((date) => {
+      const payment = paymentMap.get(date) || { orders: 0, gross_income: 0 };
+      const cogs = cogsMap.get(date) || { cogs: 0, volume_kg: 0 };
+      const dayExpenses = expenseMap.get(date) || 0;
+      const dayGross = Number(payment.gross_income);
+      const dayCogs = Number(cogs.cogs);
+      return {
+        date,
+        orders: payment.orders,
+        grossIncome: dayGross,
+        volumeKg: Number(cogs.volume_kg),
+        totalExpenses: dayExpenses,
+        netIncome: Number((dayGross - dayCogs - dayExpenses).toFixed(2)),
+      };
+    });
 
   expenseByDate.forEach(({ date, totalExpenses: dayExpenses }) => {
     const key = String(date);
@@ -758,19 +1108,19 @@ export async function getSalesReportAnalytics(period, startDate, endDate) {
     `SELECT
        p.brand,
        COALESCE(SUM(sr.sale_quantity), 0)::int AS units_sold
-     ${baseFrom}
+     ${saleBaseFrom}
      GROUP BY p.brand
      ORDER BY units_sold DESC`,
-    params,
+    saleParams,
   );
 
   const customerTypeResult = await query(
     `SELECT
        CASE WHEN sr.price_type = 'Wholesale' THEN 'Commercial' ELSE 'Retail' END AS customer_type,
        COUNT(*)::int AS order_count
-     ${baseFrom}
+     ${saleBaseFrom}
      GROUP BY 1`,
-    params,
+    saleParams,
   );
 
   return {
