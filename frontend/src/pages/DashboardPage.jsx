@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api, formatCurrency } from "../api/client";
+import { formatDateLocale } from "../utils/dates";
 import { useToast } from "../context/ToastContext";
 import { useAuth } from "../context/AuthContext";
 import LoadingSpinner from "../components/LoadingSpinner";
@@ -316,7 +317,7 @@ export default function DashboardPage() {
                     {formatCurrency(item.amount)}
                   </td>
                   <td className="p-3 text-center">
-                    {new Date(item.date).toLocaleDateString("en-PH")}
+                    {formatDateLocale(item.date)}
                   </td>
                   {isAdministrator && (
                     <td className="p-3 text-center space-x-1">

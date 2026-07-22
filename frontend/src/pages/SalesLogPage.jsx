@@ -343,7 +343,7 @@ export default function SalesLogPage() {
                     {formatCurrency(item.amount)}
                   </td>
                   <td className="p-3 text-center">
-                    {new Date(item.date).toLocaleDateString("en-PH")}
+                    {formatDateLocale(item.date)}
                   </td>
                 </tr>
               ))}

@@ -11,7 +11,7 @@ import {
   Title,
 } from "@mantine/core";
 import { DatePickerInput } from "@mantine/dates";
-import { formatDateISO } from "../utils/dates";
+import { formatDateISO, formatDateLocale } from "../utils/dates";
 import {
   LineChart,
   Line,
@@ -359,7 +359,7 @@ export default function SalesReportSection({ refreshKey = 0 }) {
                       dataKey="date"
                       tick={{ fontSize: 12 }}
                       tickFormatter={(date) =>
-                        new Date(date).toLocaleDateString("en-PH", {
+                        formatDateLocale(date, "en-PH", {
                           month: "short",
                           day: "numeric",
                         })
@@ -374,9 +374,7 @@ export default function SalesReportSection({ refreshKey = 0 }) {
                           return [value.toLocaleString(), "Volume (kg)"];
                         return [value, name];
                       }}
-                      labelFormatter={(label) =>
-                        new Date(label).toLocaleDateString("en-PH")
-                      }
+                      labelFormatter={(label) => formatDateLocale(label)}
                     />
                     <Legend />
                     <Line
@@ -412,7 +410,7 @@ export default function SalesReportSection({ refreshKey = 0 }) {
                       dataKey="date"
                       tick={{ fontSize: 12 }}
                       tickFormatter={(date) =>
-                        new Date(date).toLocaleDateString("en-PH", {
+                        formatDateLocale(date, "en-PH", {
                           month: "short",
                           day: "numeric",
                         })
@@ -421,9 +419,7 @@ export default function SalesReportSection({ refreshKey = 0 }) {
                     <YAxis />
                     <Tooltip
                       formatter={(value) => formatCurrency(value)}
-                      labelFormatter={(label) =>
-                        new Date(label).toLocaleDateString("en-PH")
-                      }
+                      labelFormatter={(label) => formatDateLocale(label)}
                     />
                     <Legend />
                     <Line
@@ -467,7 +463,7 @@ export default function SalesReportSection({ refreshKey = 0 }) {
                       dataKey="date"
                       tick={{ fontSize: 12 }}
                       tickFormatter={(date) =>
-                        new Date(date).toLocaleDateString("en-PH", {
+                        formatDateLocale(date, "en-PH", {
                           month: "short",
                           day: "numeric",
                         })
@@ -486,9 +482,7 @@ export default function SalesReportSection({ refreshKey = 0 }) {
                         if (name === "orders") return [value, "Orders"];
                         return [value, name];
                       }}
-                      labelFormatter={(label) =>
-                        new Date(label).toLocaleDateString("en-PH")
-                      }
+                      labelFormatter={(label) => formatDateLocale(label)}
                     />
                     <Legend />
                     <Bar

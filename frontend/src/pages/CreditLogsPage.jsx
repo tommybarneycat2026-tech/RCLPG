@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api, formatCurrency } from '../api/client';
+import { formatDateLocale } from '../utils/dates';
 import { useToast } from '../context/ToastContext';
 import LoadingSpinner from '../components/LoadingSpinner';
 import Modal from '../components/Modal';
@@ -113,7 +114,7 @@ function CreditDetailModal({ saleId, readOnly, onClose, onSettled }) {
                   <tbody className="divide-y divide-slate-100">
                     {summary.payment_history.map((row) => (
                       <tr key={row.credit_id}>
-                        <td className="p-3">{new Date(row.date_paid).toLocaleString('en-PH')}</td>
+                        <td className="p-3">{formatDateLocale(row.date_paid)}</td>
                         <td className="p-3 text-right font-bold">{formatCurrency(row.balance_paid)}</td>
                       </tr>
                     ))}
