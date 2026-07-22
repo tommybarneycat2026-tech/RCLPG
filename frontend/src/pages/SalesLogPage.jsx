@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, formatCurrency } from "../api/client";
 import { formatDateLocale } from "../utils/dates";
 import { useToast } from "../context/ToastContext";
@@ -35,8 +35,76 @@ export default function SalesLogPage() {
   const [expenseFilter, setExpenseFilter] = useState("today");
   const [expenseStartDate, setExpenseStartDate] = useState("");
   const [expenseEndDate, setExpenseEndDate] = useState("");
+  const [sortConfig, setSortConfig] = useState({ field: "log_date", direction: "desc" });
 
   const selectedSale = sales.find((s) => s.sale_id === selectedSaleId);
+
+  const sortedSales = useMemo(() => {
+    const field = sortConfig.field;
+    if (!field) return sales;
+
+    const mapped = sales.map((sale) => {
+      const isPayment = sale.entry_type === "payment";
+      const logDate = new Date(sale.log_date || sale.date_created || sale.date_paid || 0);
+      return {
+        sale,
+        sortValue: (() => {
+          switch (field) {
+            case "log_date":
+              return logDate;
+            case "product":
+              return `${sale.weight_class || ""} ${sale.brand || ""}`;
+            case "customer":
+              return sale.customer_name || "";
+            case "type":
+              return isPayment ? "Credit Payment" : sale.payment_option || "";
+            case "traded":
+              return sale.lpg_tank_variant || "";
+            case "qty":
+              return Number(sale.sale_quantity || 0);
+            case "unit_price":
+              return Number(sale.unit_price || 0);
+            case "total_billing":
+              return Number(isPayment ? sale.balance_paid || 0 : sale.total_amount || 0);
+            case "balance_paid":
+              return Number(sale.balance_paid || 0);
+            default:
+              return sale[sortConfig.field] || "";
+          }
+        })(),
+      };
+    });
+
+    mapped.sort((a, b) => {
+      const left = a.sortValue;
+      const right = b.sortValue;
+      if (left === right) return 0;
+      if (left instanceof Date && right instanceof Date) {
+        return left - right;
+      }
+      if (typeof left === "number" && typeof right === "number") {
+        return left - right;
+      }
+      return String(left).localeCompare(String(right), "en", { numeric: true });
+    });
+
+    if (sortConfig.direction === "desc") {
+      mapped.reverse();
+    }
+
+    return mapped.map((item) => item.sale);
+  }, [sales, sortConfig]);
+
+  const handleSort = (field) => {
+    setSortConfig((prev) =>
+      prev.field === field
+        ? {
+            field,
+            direction: prev.direction === "asc" ? "desc" : "asc",
+          }
+        : { field, direction: "asc" },
+    );
+  };
 
   const loadData = useCallback(async () => {
     try {
@@ -408,20 +476,37 @@ export default function SalesLogPage() {
         <table className="w-full text-left text-xs sm:text-sm whitespace-nowrap">
           <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold uppercase tracking-wider">
             <tr>
-              <th className="p-3">Log Date</th>
-              <th className="p-3">Product</th>
-              <th className="p-3">Customer</th>
-              <th className="p-3">Type</th>
-              <th className="p-3 text-center">Traded</th>
-              <th className="p-3 text-center">Qty</th>
-              <th className="p-3 text-right">Unit Price</th>
-              <th className="p-3 text-right">Total Billing</th>  
-              <th className="p-3 text-right">Balance Paid</th>
-              {isAdministrator && <th className="p-3 text-center">Actions</th>}
+              {[
+                { key: "log_date", label: "Log Date", align: "text-left" },
+                { key: "product", label: "Product", align: "text-left" },
+                { key: "customer", label: "Customer", align: "text-left" },
+                { key: "type", label: "Type", align: "text-left" },
+                { key: "traded", label: "Traded", align: "text-center" },
+                { key: "qty", label: "Qty", align: "text-center" },
+                { key: "unit_price", label: "Unit Price", align: "text-right" },
+                { key: "total_billing", label: "Total Billing", align: "text-right" },
+                { key: "balance_paid", label: "Balance Paid", align: "text-right" },
+              ].map((column) => (
+                <th
+                  key={column.key}
+                  className={`p-3 ${column.align} cursor-pointer select-none`}
+                  onClick={() => handleSort(column.key)}
+                >
+                  <div className="inline-flex items-center gap-1">
+                    {column.label}
+                    {sortConfig.field === column.key && (
+                      <span className="text-xs">{sortConfig.direction === "asc" ? "▲" : "▼"}</span>
+                    )}
+                  </div>
+                </th>
+              ))}
+              {isAdministrator && (
+                <th className="p-3 text-center">Actions</th>
+              )}
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 font-medium text-slate-600">
-            {sales.map((sale) => {
+            {sortedSales.map((sale) => {
               const isPayment = sale.entry_type === "payment";
               return (
                 <tr

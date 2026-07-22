@@ -446,6 +446,14 @@ export default function SalesReportSection({ refreshKey = 0 }) {
                       dot={{ r: 4 }}
                       name="Net Income"
                     />
+                    <Line
+                      type="monotone"
+                      dataKey="netIncomeFullyPaid"
+                      stroke="#f59e0b"
+                      strokeWidth={2}
+                      dot={{ r: 4 }}
+                      name="Net Income (Only Fully Paid Sale)"
+                    />
                   </LineChart>
                 </ResponsiveContainer>
               </Card>
@@ -472,13 +480,10 @@ export default function SalesReportSection({ refreshKey = 0 }) {
                     <YAxis />
                     <Tooltip
                       formatter={(value, name) => {
-                        if (name === "grossIncome" || name === "netIncome")
-                          return [
-                            formatCurrency(value),
-                            name === "grossIncome"
-                              ? "Gross Income"
-                              : "Net Income",
-                          ];
+                        if (name === "grossIncome") return [formatCurrency(value), "Gross Income"];
+                        if (name === "netIncome") return [formatCurrency(value), "Net Income"];
+                        if (name === "netIncomeFullyPaid")
+                          return [formatCurrency(value), "Net Income (Only Fully Paid Sale)"];
                         if (name === "orders") return [value, "Orders"];
                         return [value, name];
                       }}
@@ -491,6 +496,11 @@ export default function SalesReportSection({ refreshKey = 0 }) {
                       name="Gross Income"
                     />
                     <Bar dataKey="netIncome" fill="#8b5cf6" name="Net Income" />
+                    <Bar
+                      dataKey="netIncomeFullyPaid"
+                      fill="#f59e0b"
+                      name="Net Income (Only Fully Paid Sale)"
+                    />
                   </BarChart>
                 </ResponsiveContainer>
               </Card>

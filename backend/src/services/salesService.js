@@ -754,9 +754,7 @@ export async function getSalesReport({
   const customerSegments = mapSegments(
     customerTypeResult.rows.map((r) => ({
       label:
-        r.price_type === "Wholesale"
-          ? "Commercial Wholesale"
-          : "Retail Residential",
+        r.price_type === "Wholesale" ? "Retail Price" : "Consumer Price",
       order_count: r.order_count,
       revenue: r.revenue,
     })),
@@ -862,11 +860,39 @@ export async function getDailyMetrics({
     paymentParams,
   );
 
+  const dailyOrders = await query(
+    `SELECT
+       ${sqlManilaDate("sr.date_created")} AS date,
+       COUNT(*)::int AS orders,
+       COALESCE(SUM(p.weight_class * sr.sale_quantity), 0)::numeric AS volume_kg
+     FROM sales_records sr
+     JOIN lpg_products p ON p.product_id = sr.product_id
+     WHERE sr.status IN ('Active', 'Finished')
+       ${saleWhere}
+     GROUP BY ${sqlManilaDate("sr.date_created")}
+     ORDER BY ${sqlManilaDate("sr.date_created")} ASC`,
+    saleParams,
+  );
+
   const cogsByDate = await query(
     `SELECT
        ${sqlManilaDate("sr.date_created")} AS date,
-       COALESCE(SUM(CASE WHEN credit_sales.sales_id IS NULL THEN p.initial_price * sr.sale_quantity ELSE 0 END), 0)::numeric AS cogs,
+       COALESCE(SUM(p.initial_price * sr.sale_quantity), 0)::numeric AS cogs,
        COALESCE(SUM(p.weight_class * sr.sale_quantity), 0)::numeric AS volume_kg
+     FROM sales_records sr
+     JOIN lpg_products p ON p.product_id = sr.product_id
+     WHERE sr.status IN ('Active', 'Finished')
+       ${saleWhere}
+     GROUP BY ${sqlManilaDate("sr.date_created")}
+     ORDER BY ${sqlManilaDate("sr.date_created")} ASC`,
+    saleParams,
+  );
+
+  const fullyPaidByDate = await query(
+    `SELECT
+       ${sqlManilaDate("sr.date_created")} AS date,
+       COALESCE(SUM(sr.total_amount), 0)::numeric AS fully_paid_gross_income,
+       COALESCE(SUM(p.initial_price * sr.sale_quantity), 0)::numeric AS fully_paid_cogs
      FROM sales_records sr
      JOIN lpg_products p ON p.product_id = sr.product_id
      LEFT JOIN (
@@ -877,6 +903,7 @@ export async function getDailyMetrics({
      ) credit_sales ON credit_sales.sales_id = sr.sale_id
      WHERE sr.status IN ('Active', 'Finished')
        ${saleWhere}
+       AND credit_sales.sales_id IS NULL
      GROUP BY ${sqlManilaDate("sr.date_created")}
      ORDER BY ${sqlManilaDate("sr.date_created")} ASC`,
     saleParams,
@@ -894,13 +921,21 @@ export async function getDailyMetrics({
   const paymentMap = new Map(
     dailyPayments.rows.map((row) => [String(row.date), row]),
   );
+  const orderMap = new Map(
+    dailyOrders.rows.map((row) => [String(row.date), row]),
+  );
   const cogsMap = new Map(
     cogsByDate.rows.map((row) => [String(row.date), row]),
+  );
+  const fullyPaidMap = new Map(
+    fullyPaidByDate.rows.map((row) => [String(row.date), row]),
   );
 
   const allDates = new Set([
     ...dailyPayments.rows.map((row) => String(row.date)),
+    ...dailyOrders.rows.map((row) => String(row.date)),
     ...cogsByDate.rows.map((row) => String(row.date)),
+    ...fullyPaidByDate.rows.map((row) => String(row.date)),
     ...expenseByDate.map((row) => String(row.date)),
   ]);
 
@@ -908,19 +943,27 @@ export async function getDailyMetrics({
     .sort((a, b) => new Date(a) - new Date(b))
     .map((date) => {
       const payment = paymentMap.get(date) || { orders: 0, gross_income: 0 };
+      const orderRow = orderMap.get(date) || { orders: 0, volume_kg: 0 };
       const cogs = cogsMap.get(date) || { cogs: 0, volume_kg: 0 };
+      const fullyPaid = fullyPaidMap.get(date) || {
+        fully_paid_gross_income: 0,
+        fully_paid_cogs: 0,
+      };
       const dailyExpenses = expenseMap.get(date) || 0;
       const grossIncome = Number(payment.gross_income);
       const costOfGoodsSold = Number(cogs.cogs);
+      const fullyPaidGrossIncome = Number(fullyPaid.fully_paid_gross_income);
+      const fullyPaidCogs = Number(fullyPaid.fully_paid_cogs);
       return {
         date,
-        orders: payment.orders,
+        orders: orderRow.orders,
         grossIncome,
         costOfGoodsSold,
-        volumeKg: Number(cogs.volume_kg),
+        volumeKg: Number(orderRow.volume_kg),
         totalExpenses: dailyExpenses,
-        netIncome: Number(
-          (grossIncome - (costOfGoodsSold - dailyExpenses)).toFixed(2),
+        netIncome: Number((grossIncome - costOfGoodsSold - dailyExpenses).toFixed(2)),
+        netIncomeFullyPaid: Number(
+          (fullyPaidGrossIncome - fullyPaidCogs - dailyExpenses).toFixed(2),
         ),
       };
     });
@@ -1181,7 +1224,7 @@ export async function getSalesReportAnalytics(period, startDate, endDate) {
 
   const customerTypeResult = await query(
     `SELECT
-       CASE WHEN sr.price_type = 'Wholesale' THEN 'Commercial' ELSE 'Retail' END AS customer_type,
+       CASE WHEN sr.price_type = 'Wholesale' THEN 'Retail Price' ELSE 'Consumer Price' END AS customer_type,
        COUNT(*)::int AS order_count
      ${saleBaseFrom}
      GROUP BY 1`,
