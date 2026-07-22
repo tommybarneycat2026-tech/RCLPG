@@ -408,14 +408,13 @@ export default function SalesLogPage() {
           <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold uppercase tracking-wider">
             <tr>
               <th className="p-3">Log Date</th>
-              <th className="p-3">Customer Name</th>
-              <th className="p-3">Price Type</th>
-              <th className="p-3">Product Brought</th>
-              <th className="p-3">Brand Traded</th>
+              <th className="p-3">Product</th>
+              <th className="p-3">Customer</th>
+              <th className="p-3">Type</th>
+              <th className="p-3 text-center">Traded</th>
               <th className="p-3 text-center">Qty</th>
               <th className="p-3 text-right">Unit Price</th>
-              <th className="p-3 text-right">Total Billing</th>
-              <th className="p-3 text-center">Payment Type</th>
+              <th className="p-3 text-right">Total Billing</th>  
               <th className="p-3 text-right">Balance Paid</th>
               {isAdministrator && <th className="p-3 text-center">Actions</th>}
             </tr>
@@ -435,37 +434,34 @@ export default function SalesLogPage() {
                   <td className="p-3">
                     {new Date(sale.log_date || sale.date_created || sale.date_paid).toLocaleDateString("en-PH")}
                   </td>
-                  <td className="p-3 font-bold text-slate-800">
+                  <td className="p-3">
+                      {sale.weight_class}kg - {sale.brand}
+                  </td>
+                  <td className="p-3 font-bold text-slate-800 ">
                     {sale.customer_name}
                   </td>
                   <td className="p-3">
-                    {sale.payment_option}
+                    {isPayment ? "Credit Payment" : sale.payment_option}
                   </td>
-                  <td className="p-3">
-                      {sale.brand} - {sale.weight_class}kg - {sale.product_status}
-                  </td>
-                  <td className="p-3 font-semibold text-indigo-700">
+                  <td className="p-3 font-semibold text-indigo-700 text-center">
                       {sale.lpg_tank_variant}
                   </td>
                   <td className="p-3 text-center font-bold">
-                    {sale.sale_quantity}
-                  </td>
-                  <td className="p-3 text-right">
-                    {isPayment ? "" : formatCurrency(sale.unit_price)}
-                  </td>
-                  <td className="p-3 text-right text-red-600 font-extrabold">
-                    {isPayment ? formatCurrency(sale.balance_paid || 0) : formatCurrency(sale.total_amount)}
+                    {
+                      isPayment ? " " : sale.sale_quantity
+                    }
                   </td>
                   <td className="p-3 text-center">
-                    {isPayment ? "Credit Payment" : sale.payment_option}
+                    {isPayment ? "" : formatCurrency(sale.unit_price)}
                   </td>
-                  <td className="p-3 text-right font-semibold text-slate-700">
-                    {formatCurrency(
-                      sale.payment_option === "Fully Paid"
-                        ? sale.total_amount
-                        : sale.balance_paid || 0
-                    )}
+                  <td className="p-3 text-center text-red-600 font-extrabold">
+                    {isPayment ? formatCurrency(sale.balance_paid || 0) : formatCurrency(sale.total_amount)}
                   </td>
+                  <td className="p-3 text-center font-semibold text-slate-700">
+                  {sale.payment_option === "Fully Paid"
+                    ? `Fully Paid`
+                    : formatCurrency(sale.balance_paid || 0)}
+                </td>
                   {isAdministrator && (
                     <td className="p-3 text-center space-x-1">
                       {!isPayment && (

@@ -211,7 +211,7 @@ function SegmentBlock({ title, items, valueKey = "revenue" }) {
 
 export default function SalesReportSection({ refreshKey = 0 }) {
   const { showToast } = useToast();
-  const [quickFilter, setQuickFilter] = useState("month");
+  const [quickFilter, setQuickFilter] = useState("today");
   const [dateRange, setDateRange] = useState([null, null]);
   const [report, setReport] = useState(null);
   const [dailyMetrics, setDailyMetrics] = useState([]);
@@ -271,7 +271,7 @@ export default function SalesReportSection({ refreshKey = 0 }) {
         <Select
           label="Quick Filters"
           value={quickFilter}
-          onChange={(v) => setQuickFilter(v || "month")}
+          onChange={(v) => setQuickFilter(v || "today")}
           data={[
             { value: "today", label: "Today" },
             { value: "week", label: "This Week" },
@@ -309,14 +309,14 @@ export default function SalesReportSection({ refreshKey = 0 }) {
               formula={summary?.grossIncomeFormula}
             />
             <MetricCard
-              label="Net Income"
+              label="Net Income (Fully Paid & Credit Sale)"
               value={formatCurrency(summary?.netIncome)}
               icon={<NetIncomeIcon />}
               tone="text-indigo-600"
               formula={summary?.netIncomeFormula}
             />
             <MetricCard
-              label="Net Income w/o Credit"
+              label="Net Income (Only Fully Paid Sales)"
               value={formatCurrency(summary?.netIncomeWithoutCredit)}
               icon={<NetIncomeIcon />}
               tone="text-amber-600"
