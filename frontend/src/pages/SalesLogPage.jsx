@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, formatCurrency } from "../api/client";
+import { formatDateLocale } from "../utils/dates";
 import { useToast } from "../context/ToastContext";
 import { useAuth } from "../context/AuthContext";
 import LoadingSpinner from "../components/LoadingSpinner";
@@ -432,7 +433,7 @@ export default function SalesLogPage() {
                   }
                 >
                   <td className="p-3">
-                    {new Date(sale.log_date || sale.date_created || sale.date_paid).toLocaleDateString("en-PH")}
+                    {formatDateLocale(sale.log_date || sale.date_created || sale.date_paid)}
                   </td>
                   <td className="p-3">
                       {sale.weight_class}kg - {sale.brand}
