@@ -181,14 +181,9 @@ function SegmentBlock({ title, items, valueKey = "revenue" }) {
         {items.map((item) => (
           <div key={item.label}>
             <Group justify="space-between" mb={4}>
-              <Group gap="xs">
-                <Text size="sm" fw={600}>
-                  {item.label}
-                </Text>
-                <Badge size="sm" variant="light">
-                  {item.orders ?? item.transactions ?? 0} orders
-                </Badge>
-              </Group>
+              <Text size="sm" fw={600}>
+                {item.label}
+              </Text>
               <Text size="sm" fw={700}>
                 {formatCurrency(item[valueKey])}
               </Text>
