@@ -88,20 +88,38 @@ export function buildExportDateFilter(period, startDate, endDate, dateColumn = '
       clauses.push(`${manilaDate} = $${idx++}`);
     }
     params.push(startDate);
-  } else if (period === 'monthly' && startDate) {
+  } else if (period === 'monthly') {
     if (dateColumn === 'e.date') {
-      clauses.push(`DATE_TRUNC('month', e.date) = DATE_TRUNC('month', $${idx++}::date)`);
+      if (startDate) {
+        clauses.push(`DATE_TRUNC('month', e.date) = DATE_TRUNC('month', $${idx++}::date)`);
+        params.push(startDate);
+      } else {
+        clauses.push(`DATE_TRUNC('month', e.date) = DATE_TRUNC('month', CURRENT_DATE)`);
+      }
     } else {
-      clauses.push(`DATE_TRUNC('month', ${manilaDate}) = DATE_TRUNC('month', $${idx++}::date)`);
+      if (startDate) {
+        clauses.push(`DATE_TRUNC('month', ${manilaDate}) = DATE_TRUNC('month', $${idx++}::date)`);
+        params.push(startDate);
+      } else {
+        clauses.push(`DATE_TRUNC('month', ${manilaDate}) = DATE_TRUNC('month', CURRENT_DATE)`);
+      }
     }
-    params.push(startDate);
-  } else if (period === 'weekly' && startDate) {
+  } else if (period === 'weekly') {
     if (dateColumn === 'e.date') {
-      clauses.push(`e.date >= DATE_TRUNC('week', $${idx++}::date)::date`);
+      if (startDate) {
+        clauses.push(`e.date >= DATE_TRUNC('week', $${idx++}::date)::date`);
+        params.push(startDate);
+      } else {
+        clauses.push(`e.date >= DATE_TRUNC('week', CURRENT_DATE)::date`);
+      }
     } else {
-      clauses.push(`${manilaDate} >= DATE_TRUNC('week', $${idx++}::date)::date`);
+      if (startDate) {
+        clauses.push(`${manilaDate} >= DATE_TRUNC('week', $${idx++}::date)::date`);
+        params.push(startDate);
+      } else {
+        clauses.push(`${manilaDate} >= DATE_TRUNC('week', CURRENT_DATE)::date`);
+      }
     }
-    params.push(startDate);
   } else if ((period === 'first_half' || period === 'second_half')) {
     const year = startDate ? new Date(`${startDate}T12:00:00`).getFullYear() : getManilaYear();
     if (dateColumn === 'e.date') {

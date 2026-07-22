@@ -36,6 +36,8 @@ export default function SalesLogPage() {
   const [expenseStartDate, setExpenseStartDate] = useState("");
   const [expenseEndDate, setExpenseEndDate] = useState("");
   const [sortConfig, setSortConfig] = useState({ field: "log_date", direction: "desc" });
+  const [page, setPage] = useState(1);
+  const pageSize = 10;
 
   const selectedSale = sales.find((s) => s.sale_id === selectedSaleId);
 
@@ -94,6 +96,15 @@ export default function SalesLogPage() {
 
     return mapped.map((item) => item.sale);
   }, [sales, sortConfig]);
+
+  const totalPages = Math.max(1, Math.ceil(sortedSales.length / pageSize));
+  const pagedSales = sortedSales.slice((page - 1) * pageSize, page * pageSize);
+
+  useEffect(() => {
+    if (page > totalPages) {
+      setPage(totalPages);
+    }
+  }, [page, totalPages]);
 
   const handleSort = (field) => {
     setSortConfig((prev) =>
@@ -506,7 +517,7 @@ export default function SalesLogPage() {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 font-medium text-slate-600">
-            {sortedSales.map((sale) => {
+            {pagedSales.map((sale) => {
               const isPayment = sale.entry_type === "payment";
               return (
                 <tr
@@ -607,6 +618,30 @@ export default function SalesLogPage() {
           </tbody>
         </table>
       </div>
+
+      {sortedSales.length > pageSize && (
+        <div className="flex items-center justify-between gap-3 px-4 py-3 bg-slate-50 border-t border-slate-200 text-xs text-slate-600">
+          <button
+            type="button"
+            onClick={() => setPage((prev) => Math.max(prev - 1, 1))}
+            disabled={page <= 1}
+            className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Previous
+          </button>
+          <div>
+            Page {page} of {totalPages}
+          </div>
+          <button
+            type="button"
+            onClick={() => setPage((prev) => Math.min(prev + 1, totalPages))}
+            disabled={page >= totalPages}
+            className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Next
+          </button>
+        </div>
+      )}
 
       {isAdministrator && deleteTarget && (
         <Modal

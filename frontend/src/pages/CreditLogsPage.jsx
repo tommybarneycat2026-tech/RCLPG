@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api, formatCurrency } from '../api/client';
-import { formatDateLocale } from '../utils/dates';
 import { useToast } from '../context/ToastContext';
 import LoadingSpinner from '../components/LoadingSpinner';
 import Modal from '../components/Modal';
@@ -114,7 +113,7 @@ function CreditDetailModal({ saleId, readOnly, onClose, onSettled }) {
                   <tbody className="divide-y divide-slate-100">
                     {summary.payment_history.map((row) => (
                       <tr key={row.credit_id}>
-                        <td className="p-3">{formatDateLocale(row.date_paid)}</td>
+                        <td className="p-3">{new Date(row.date_paid).toLocaleString('en-PH')}</td>
                         <td className="p-3 text-right font-bold">{formatCurrency(row.balance_paid)}</td>
                       </tr>
                     ))}
@@ -184,6 +183,8 @@ export default function CreditLogsPage() {
   const { showToast } = useToast();
   const [credits, setCredits] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(1);
+  const pageSize = 10;
   const [activeModal, setActiveModal] = useState(null);
   const [downloadOpen, setDownloadOpen] = useState(false);
 
@@ -217,6 +218,15 @@ export default function CreditLogsPage() {
     };
   }, [loadData]);
 
+  const totalPages = Math.max(1, Math.ceil(credits.length / pageSize));
+  const pagedCredits = credits.slice((page - 1) * pageSize, page * pageSize);
+
+  useEffect(() => {
+    if (page > totalPages) {
+      setPage(totalPages);
+    }
+  }, [page, totalPages]);
+
   if (loading && !credits.length) return <LoadingSpinner />;
 
   return (
@@ -235,24 +245,24 @@ export default function CreditLogsPage() {
           <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold uppercase tracking-wider">
             <tr>
               <th className="p-3">Customer Name</th>
-              <th className="p-3">Phone Number</th>
+              <th className="p-3">Number</th>
               <th className="p-3">Product Details</th>
-              <th className="p-3 text-right">Product Price</th>
-              <th className="p-3 text-right">Total Paid</th>
-              <th className="p-3 text-right">Remaining Credit</th>
+              <th className="p-3 text-center">Product Price</th>
+              <th className="p-3 text-center">Total Paid</th>
+              <th className="p-3 text-center">Remaining Credit</th>
               <th className="p-3 text-center">Credit Status</th>
               <th className="p-3 text-center">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 font-medium text-slate-600">
-            {credits.map((row) => (
+            {pagedCredits.map((row) => (
               <tr key={row.sale_id} className="hover:bg-slate-50/80">
                 <td className="p-3 font-bold text-slate-800">{row.customer_name}</td>
                 <td className="p-3 font-mono text-xs">{row.phone_number || '-'}</td>
                 <td className="p-3">{row.product_details}</td>
-                <td className="p-3 text-right">{formatCurrency(row.total_amount)}</td>
-                <td className="p-3 text-right text-emerald-600 font-bold">{formatCurrency(row.total_paid)}</td>
-                <td className="p-3 text-right text-red-600 font-extrabold">{formatCurrency(row.remaining_credit)}</td>
+                <td className="p-3 text-center">{formatCurrency(row.total_amount)}</td>
+                <td className="p-3 text-center text-emerald-600 font-bold">{formatCurrency(row.total_paid)}</td>
+                <td className="p-3 text-center text-red-600 font-extrabold">{formatCurrency(row.remaining_credit)}</td>
                 <td className="p-3 text-center"><CreditStatusBadge status={row.credit_status} /></td>
                 <td className="p-3 text-center">
                   {row.remaining_credit > 0 ? (
@@ -281,6 +291,30 @@ export default function CreditLogsPage() {
           </tbody>
         </table>
       </div>
+
+      {credits.length > pageSize && (
+        <div className="flex items-center justify-between gap-3 px-4 py-3 bg-slate-50 border-t border-slate-200 text-xs text-slate-600">
+          <button
+            type="button"
+            onClick={() => setPage((prev) => Math.max(prev - 1, 1))}
+            disabled={page <= 1}
+            className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Previous
+          </button>
+          <div>
+            Page {page} of {totalPages}
+          </div>
+          <button
+            type="button"
+            onClick={() => setPage((prev) => Math.min(prev + 1, totalPages))}
+            disabled={page >= totalPages}
+            className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Next
+          </button>
+        </div>
+      )}
 
       {activeModal && (
         <CreditDetailModal
