@@ -95,6 +95,15 @@ export const archiveUser = [
   }),
 ];
 
+export const deleteUser = [
+  param('adminId').isUUID().withMessage('Invalid user ID'),
+  asyncHandler(async (req, res) => {
+    const deleted = await adminService.deleteAdmin(req.params.adminId, req.admin.adminId);
+    broadcastRealtime('admin:changed', { action: 'deleted', adminId: req.params.adminId, admin: deleted });
+    res.json({ success: true, data: deleted, message: 'User deleted successfully' });
+  }),
+];
+
 export const createUser = [
   body('name').trim().notEmpty().withMessage('Full name is required'),
   body('username').trim().notEmpty().withMessage('Username is required'),

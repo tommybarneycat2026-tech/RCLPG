@@ -12,7 +12,7 @@ export default function ViewUserModal({ userId, onClose, onUpdated }) {
   const [editing, setEditing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [archiving, setArchiving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [form, setForm] = useState({
     name: '',
     username: '',
@@ -68,18 +68,18 @@ export default function ViewUserModal({ userId, onClose, onUpdated }) {
     }
   };
 
-  const handleArchive = async () => {
-    if (!window.confirm(`Archive ${user?.name}? They will no longer be able to sign in.`)) return;
+  const handleDelete = async () => {
+    if (!window.confirm(`Delete ${user?.name}? This cannot be undone.`)) return;
     try {
-      setArchiving(true);
-      const result = await api.archiveUser(userId);
-      setUser(result.data);
+      setDeleting(true);
+      await api.deleteUser(userId);
       onUpdated?.();
-      showToast('User Archived', result.message || 'User has been archived.');
+      onClose();
+      showToast('User Deleted', 'Staff account has been deleted.');
     } catch (err) {
-      showToast('Archive Failed', err.message, 'error');
+      showToast('Delete Failed', err.message, 'error');
     } finally {
-      setArchiving(false);
+      setDeleting(false);
     }
   };
 
@@ -106,11 +106,11 @@ export default function ViewUserModal({ userId, onClose, onUpdated }) {
           {!editing && user?.status === 'Active' && !isSelf && (
             <button
               type="button"
-              onClick={handleArchive}
-              disabled={archiving}
+              onClick={handleDelete}
+              disabled={deleting}
               className="px-4 py-2 rounded-xl text-sm font-bold text-red-600 bg-red-50 hover:bg-red-100 disabled:opacity-50"
             >
-              {archiving ? 'Archiving…' : 'Archive'}
+              {deleting ? 'Deleting…' : 'Delete'}
             </button>
           )}
           {editing ? (

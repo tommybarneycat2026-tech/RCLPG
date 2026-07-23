@@ -221,6 +221,24 @@ export async function archiveAdmin(adminId, requesterId) {
   return mapAdmin(result.rows[0]);
 }
 
+export async function deleteAdmin(adminId, requesterId) {
+  if (adminId === requesterId) {
+    throw new AppError('You cannot delete your own account', 400);
+  }
+
+  const current = await findAdminById(adminId);
+  if (!current) {
+    throw new AppError('User not found', 404);
+  }
+
+  const result = await query(
+    `DELETE FROM admins WHERE admin_id = $1 RETURNING ${ADMIN_SELECT}`,
+    [adminId]
+  );
+
+  return mapAdmin(result.rows[0]);
+}
+
 export async function createAdmin(fields) {
   const name = (fields.name || '').trim();
   if (!name) throw new AppError('Full name is required', 400);

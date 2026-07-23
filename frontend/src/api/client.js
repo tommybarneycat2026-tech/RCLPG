@@ -83,6 +83,8 @@ export const api = {
   getUser: (adminId) => request(`/users/${adminId}`),
   updateUser: (adminId, body) =>
     request(`/users/${adminId}`, { method: "PUT", body: JSON.stringify(body) }),
+  deleteUser: (adminId) =>
+    request(`/users/${adminId}`, { method: "DELETE" }),
   archiveUser: (adminId) =>
     request(`/users/${adminId}/archive`, { method: "PATCH" }),
   createUser: (body) =>

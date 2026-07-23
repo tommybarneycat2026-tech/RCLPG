@@ -132,7 +132,6 @@ export default function SalesLogPage() {
         api.getCustomers(),
       ]);
       setSales(salesRes.data);
-      console.log(salesRes.data);
       setProducts(productsRes.data);
       setCustomers(customersRes.data);
     } catch (err) {

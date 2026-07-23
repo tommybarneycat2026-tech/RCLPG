@@ -13,6 +13,7 @@ router.put('/me', ...adminController.updateOwnProfile, validate);
 router.get('/', requireAdministrator, ...adminController.listUsers, validate);
 router.get('/:adminId', requireAdministrator, ...adminController.getUser, validate);
 router.put('/:adminId', requireAdministrator, ...adminController.updateUser, validate);
+router.delete('/:adminId', requireAdministrator, ...adminController.deleteUser, validate);
 router.patch('/:adminId/archive', requireAdministrator, ...adminController.archiveUser, validate);
 
 export default router;
