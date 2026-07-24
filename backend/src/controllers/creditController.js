@@ -44,6 +44,7 @@ export const createPayment = [
       req.body.amount
     );
     broadcastRealtime('credits:changed', { action: 'payment-recorded', saleId: req.params.saleId, result });
+    broadcastRealtime('sales:changed', { action: 'credit-payment-recorded', saleId: req.params.saleId, result });
     res.status(201).json({ success: true, data: result });
   }),
 ];
@@ -54,6 +55,7 @@ export const updateCreditPayment = [
   asyncHandler(async (req, res) => {
     const result = await creditService.updatePaymentRecord(req.params.creditId, req.body.amount);
     broadcastRealtime('credits:changed', { action: 'payment-updated', creditId: req.params.creditId, result });
+    broadcastRealtime('sales:changed', { action: 'credit-payment-updated', creditId: req.params.creditId, result });
     res.json({ success: true, data: result });
   }),
 ];
@@ -63,6 +65,7 @@ export const deleteCreditPayment = [
   asyncHandler(async (req, res) => {
     const result = await creditService.deletePaymentRecord(req.params.creditId);
     broadcastRealtime('credits:changed', { action: 'payment-deleted', creditId: req.params.creditId, result });
+    broadcastRealtime('sales:changed', { action: 'credit-payment-deleted', creditId: req.params.creditId, result });
     res.json({ success: true, data: result });
   }),
 ];

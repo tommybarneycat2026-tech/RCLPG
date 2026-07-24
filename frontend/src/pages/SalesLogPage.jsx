@@ -106,6 +106,10 @@ export default function SalesLogPage() {
     }
   }, [page, totalPages]);
 
+  useEffect(() => {
+    setPage(1);
+  }, [search, dateFilter, customerNameFilter, productFilter]);
+
   const handleSort = (field) => {
     setSortConfig((prev) =>
       prev.field === field
@@ -132,6 +136,7 @@ export default function SalesLogPage() {
         api.getCustomers(),
       ]);
       setSales(salesRes.data);
+      console.log(salesRes.data);
       setProducts(productsRes.data);
       setCustomers(customersRes.data);
     } catch (err) {
@@ -295,69 +300,45 @@ export default function SalesLogPage() {
           )}
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 flex-1">
-            <div>
-              <label
-                htmlFor="date-filter"
-                className="block text-[11px] font-bold uppercase text-slate-500 mb-1"
-              >
-                Date Filter
-              </label>
+            <label className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+              <span className="mb-1 block">Search</span>
               <input
-                id="date-filter"
-                type="date"
-                value={dateFilter}
-                onChange={(e) => setDateFilter(e.target.value)}
-                className="w-full text-xs p-2.5 border border-slate-200 rounded-xl"
-              />
-            </div>
-            <div>
-              <label
-                htmlFor="customer-filter"
-                className="block text-[11px] font-bold uppercase text-slate-500 mb-1"
-              >
-                Customer Name
-              </label>
-              <input
-                id="customer-filter"
-                type="text"
-                value={customerNameFilter}
-                onChange={(e) => setCustomerNameFilter(e.target.value)}
-                placeholder="Filter by name..."
-                className="w-full text-xs p-2.5 border border-slate-200 rounded-xl"
-              />
-            </div>
-            <div>
-              <label
-                htmlFor="product-filter"
-                className="block text-[11px] font-bold uppercase text-slate-500 mb-1"
-              >
-                Product Filter
-              </label>
-              <input
-                id="product-filter"
-                type="text"
-                value={productFilter}
-                onChange={(e) => setProductFilter(e.target.value)}
-                placeholder="Brand, weight, status..."
-                className="w-full text-xs p-2.5 border border-slate-200 rounded-xl"
-              />
-            </div>
-            <div>
-              <label
-                htmlFor="sales-search"
-                className="block text-[11px] font-bold uppercase text-slate-500 mb-1"
-              >
-                Search
-              </label>
-              <input
-                id="sales-search"
                 type="search"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search transactions..."
-                className="w-full text-xs p-2.5 border border-slate-200 rounded-xl"
+                placeholder="Search transactions"
+                className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm"
               />
-            </div>
+            </label>
+            <label className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+              <span className="mb-1 block">Customer</span>
+              <input
+                type="text"
+                value={customerNameFilter}
+                onChange={(e) => setCustomerNameFilter(e.target.value)}
+                placeholder="Filter by customer"
+                className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm"
+              />
+            </label>
+            <label className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+              <span className="mb-1 block">Date</span>
+              <input
+                type="date"
+                value={dateFilter}
+                onChange={(e) => setDateFilter(e.target.value)}
+                className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm"
+              />
+            </label>
+            <label className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+              <span className="mb-1 block">Product</span>
+              <input
+                type="text"
+                value={productFilter}
+                onChange={(e) => setProductFilter(e.target.value)}
+                placeholder="Brand, weight, status"
+                className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm"
+              />
+            </label>
           </div>
         </div>
       </div>

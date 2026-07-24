@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { api, formatCurrency } from '../api/client';
 import { useToast } from '../context/ToastContext';
 import LoadingSpinner from '../components/LoadingSpinner';
@@ -184,6 +184,10 @@ export default function CreditLogsPage() {
   const [credits, setCredits] = useState([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [customerFilter, setCustomerFilter] = useState('');
+  const [dateFilter, setDateFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
   const pageSize = 10;
   const [activeModal, setActiveModal] = useState(null);
   const [downloadOpen, setDownloadOpen] = useState(false);
@@ -218,14 +222,45 @@ export default function CreditLogsPage() {
     };
   }, [loadData]);
 
-  const totalPages = Math.max(1, Math.ceil(credits.length / pageSize));
-  const pagedCredits = credits.slice((page - 1) * pageSize, page * pageSize);
+  const filteredCredits = useMemo(() => {
+    const query = searchTerm.trim().toLowerCase();
+
+    return credits.filter((row) => {
+      const matchesSearch = !query || [row.customer_name, row.phone_number, row.product_details]
+        .filter(Boolean)
+        .some((value) => String(value).toLowerCase().includes(query));
+
+      const matchesCustomer = !customerFilter || String(row.customer_name || '')
+        .toLowerCase()
+        .includes(customerFilter.trim().toLowerCase());
+
+      const matchesStatus = statusFilter === 'all'
+        || (statusFilter === 'paid' ? row.credit_status === 'Paid' : row.credit_status !== 'Paid');
+
+      const matchesDate = !dateFilter || (() => {
+        const rowDate = new Date(row.date_created);
+        const filterDate = new Date(dateFilter);
+        return rowDate.getFullYear() === filterDate.getFullYear()
+          && rowDate.getMonth() === filterDate.getMonth()
+          && rowDate.getDate() === filterDate.getDate();
+      })();
+
+      return matchesSearch && matchesCustomer && matchesStatus && matchesDate;
+    });
+  }, [credits, customerFilter, dateFilter, searchTerm, statusFilter]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredCredits.length / pageSize));
+  const pagedCredits = filteredCredits.slice((page - 1) * pageSize, page * pageSize);
 
   useEffect(() => {
     if (page > totalPages) {
       setPage(totalPages);
     }
   }, [page, totalPages]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [customerFilter, dateFilter, searchTerm, statusFilter]);
 
   if (loading && !credits.length) return <LoadingSpinner />;
 
@@ -238,6 +273,50 @@ export default function CreditLogsPage() {
         </div>
         <p className="text-xs text-red-600 font-bold uppercase tracking-wider mt-1">UTANG DESK</p>
         <p className="text-xs text-slate-400 mt-1">Track outstanding balances, installment payments, and customer credit status</p>
+      </div>
+
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <label className="text-xs font-bold uppercase tracking-wider text-slate-500">
+          <span className="mb-1 block">Search</span>
+          <input
+            type="text"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            placeholder="Customer, number, product"
+            className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm"
+          />
+        </label>
+        <label className="text-xs font-bold uppercase tracking-wider text-slate-500">
+          <span className="mb-1 block">Customer</span>
+          <input
+            type="text"
+            value={customerFilter}
+            onChange={(e) => setCustomerFilter(e.target.value)}
+            placeholder="Filter by customer"
+            className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm"
+          />
+        </label>
+        <label className="text-xs font-bold uppercase tracking-wider text-slate-500">
+          <span className="mb-1 block">Date</span>
+          <input
+            type="date"
+            value={dateFilter}
+            onChange={(e) => setDateFilter(e.target.value)}
+            className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm"
+          />
+        </label>
+        <label className="text-xs font-bold uppercase tracking-wider text-slate-500">
+          <span className="mb-1 block">Credit Status</span>
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm"
+          >
+            <option value="all">All</option>
+            <option value="unpaid">Unpaid</option>
+            <option value="paid">Paid</option>
+          </select>
+        </label>
       </div>
 
       <div className="overflow-x-auto border border-slate-100 rounded-xl">
@@ -285,14 +364,14 @@ export default function CreditLogsPage() {
                 </td>
               </tr>
             ))}
-            {credits.length === 0 && (
-              <tr><td colSpan={8} className="text-center py-8 text-slate-400">No credit sales recorded.</td></tr>
+            {filteredCredits.length === 0 && (
+              <tr><td colSpan={8} className="text-center py-8 text-slate-400">{credits.length === 0 ? 'No credit sales recorded.' : 'No matching credit sales found.'}</td></tr>
             )}
           </tbody>
         </table>
       </div>
 
-      {credits.length > pageSize && (
+      {filteredCredits.length > pageSize && (
         <div className="flex items-center justify-between gap-3 px-4 py-3 bg-slate-50 border-t border-slate-200 text-xs text-slate-600">
           <button
             type="button"

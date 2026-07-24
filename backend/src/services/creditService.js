@@ -199,6 +199,26 @@ export async function deletePaymentRecord(creditId) {
   }
 }
 
+export function sortCreditRegisterRows(rows) {
+  return [...rows].sort((left, right) => {
+    const leftIsPaid = String(left.credit_status || '').toLowerCase() === 'paid';
+    const rightIsPaid = String(right.credit_status || '').toLowerCase() === 'paid';
+
+    if (leftIsPaid !== rightIsPaid) {
+      return leftIsPaid ? 1 : -1;
+    }
+
+    const leftDate = Date.parse(left.date_created || 0);
+    const rightDate = Date.parse(right.date_created || 0);
+
+    if (Number.isNaN(leftDate) || Number.isNaN(rightDate)) {
+      return 0;
+    }
+
+    return rightDate - leftDate;
+  });
+}
+
 export async function getCreditRegister() {
   const result = await query(
     `SELECT
@@ -233,11 +253,10 @@ export async function getCreditRegister() {
        FROM credit_history
        GROUP BY sales_id
      ) pay ON pay.sales_id = sr.sale_id
-     WHERE sr.status IN ('Active', 'Finished')
-     ORDER BY remaining_credit DESC, sr.date_created DESC`
+     WHERE sr.status IN ('Active', 'Finished')`
   );
 
-  return result.rows.map((row) => ({
+  return sortCreditRegisterRows(result.rows).map((row) => ({
     ...row,
     total_paid: Number(row.total_paid),
     total_amount: Number(row.total_amount),

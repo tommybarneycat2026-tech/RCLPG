@@ -80,11 +80,16 @@ export default function DashboardPage() {
       loadData(pagination.page);
       setReportRefreshKey((k) => k + 1);
     });
+    const unsubscribeCredits = subscribeRealtime("credits:changed", () => {
+      loadData(pagination.page);
+      setReportRefreshKey((k) => k + 1);
+    });
 
     return () => {
       unsubscribeInventory();
       unsubscribeSales();
       unsubscribeExpenses();
+      unsubscribeCredits();
     };
   }, [loadData, pagination.page]);
 
