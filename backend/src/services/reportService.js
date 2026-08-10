@@ -824,11 +824,10 @@ export async function buildCreditLogPdfBuffer(rows, title, summary, generatedBy)
   doc.moveDown();
 
   // Table: pick friendly columns and widths for readability
-  const headers = ['date_created', 'customer_name', 'phone_number', 'price_type', 'product_details', 'total_amount', 'total_paid', 'remaining_credit', 'credit_status'];
+  const headers = ['date_created', 'customer_name', 'price_type', 'product_details', 'total_amount', 'total_paid', 'remaining_credit', 'credit_status'];
   const headerLabels = {
     date_created: 'Date',
     customer_name: 'Customer',
-    phone_number: 'Phone',
     price_type: 'Price Type',
     product_details: 'Product',
     total_amount: 'Total',
@@ -838,7 +837,7 @@ export async function buildCreditLogPdfBuffer(rows, title, summary, generatedBy)
   };
 
   const availableWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
-  const rel = [0.12, 0.14, 0.10, 0.12, 0.20, 0.06, 0.08, 0.10, 0.15];
+  const rel = [0.12, 0.14, 0.12, 0.20, 0.12, 0.08, 0.10, 0.15];
   const colWidths = rel.map((r) => Math.floor(r * availableWidth));
 
   function renderCreditHeader() {
@@ -865,7 +864,6 @@ export async function buildCreditLogPdfBuffer(rows, title, summary, generatedBy)
     const values = [
       new Date(r.date_created).toLocaleString('en-PH'),
       String(r.customer_name ?? ''),
-      String(r.phone_number ?? ''),
       String(r.price_type ?? ''),
       String(r.product_details ?? ''),
       r.total_amount != null ? formatPhpCurrency(r.total_amount) : '',
