@@ -42,6 +42,12 @@ router.get(
   validate,
 );
 router.get(
+  "/download-expense-log",
+  requireAdministrator,
+  ...dashboardController.downloadExpenseLog,
+  validate,
+);
+router.get(
   "/download-credit-log",
   requireAdministrator,
   ...dashboardController.downloadCreditLog,

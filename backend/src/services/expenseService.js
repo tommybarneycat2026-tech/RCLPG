@@ -213,3 +213,27 @@ export async function getDailyExpenseTotalsForExport(
     totalExpenses: Number(row.total_expenses),
   }));
 }
+
+export async function getExpensesForExport(period, startDate, endDate) {
+  const { where, params } = buildExportDateFilter(
+    period,
+    startDate,
+    endDate,
+    "e.date",
+  );
+
+  const result = await query(
+    `SELECT e.expenses_id, e.expenses, e.amount, e.date
+     FROM expenses e
+     WHERE 1=1 ${where}
+     ORDER BY e.date DESC, e.expenses_id DESC`,
+    params,
+  );
+
+  return result.rows.map((row) => ({
+    expenses_id: row.expenses_id,
+    expenses: row.expenses,
+    amount: Number(row.amount),
+    date: row.date,
+  }));
+}

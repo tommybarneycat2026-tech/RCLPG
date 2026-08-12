@@ -84,7 +84,7 @@ export function buildExportDateFilter(period, startDate, endDate, dateColumn = '
   } else if (period === 'daily' && normalizedStartDate) {
     clauses.push(`${columnExpr} = $${idx++}::date`);
     params.push(normalizedStartDate);
-  } else if (period === 'monthly') {
+  } else if (period === 'monthly' || period === 'month') {
     if (normalizedStartDate) {
       clauses.push(`DATE_TRUNC('month', ${columnExpr}) = DATE_TRUNC('month', $${idx++}::date)`);
       params.push(normalizedStartDate);
@@ -94,7 +94,7 @@ export function buildExportDateFilter(period, startDate, endDate, dateColumn = '
         `(DATE_TRUNC('month', ${SQL_TODAY}::timestamp) + INTERVAL '1 month - 1 day')::date`,
       );
     }
-  } else if (period === 'weekly') {
+  } else if (period === 'weekly' || period === 'week') {
     if (normalizedStartDate) {
       addRangeClause(
         `DATE_TRUNC('week', $${idx++}::date)::date`,
@@ -105,6 +105,16 @@ export function buildExportDateFilter(period, startDate, endDate, dateColumn = '
       addRangeClause(
         `DATE_TRUNC('week', ${SQL_TODAY}::timestamp)::date`,
         `(DATE_TRUNC('week', ${SQL_TODAY}::timestamp) + INTERVAL '6 days')::date`,
+      );
+    }
+  } else if (period === 'yearly' || period === 'year') {
+    if (normalizedStartDate) {
+      clauses.push(`DATE_TRUNC('year', ${columnExpr}) = DATE_TRUNC('year', $${idx++}::date)`);
+      params.push(normalizedStartDate);
+    } else {
+      addRangeClause(
+        `DATE_TRUNC('year', ${SQL_TODAY}::timestamp)::date`,
+        `(DATE_TRUNC('year', ${SQL_TODAY}::timestamp) + INTERVAL '1 year - 1 day')::date`,
       );
     }
   } else if ((period === 'first_half' || period === 'second_half')) {

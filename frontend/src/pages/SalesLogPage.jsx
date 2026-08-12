@@ -43,6 +43,9 @@ export default function SalesLogPage() {
   const [expenseFilter, setExpenseFilter] = useState("today");
   const [expenseStartDate, setExpenseStartDate] = useState("");
   const [expenseEndDate, setExpenseEndDate] = useState("");
+  const [expensePage, setExpensePage] = useState(1);
+  const [expensePagination, setExpensePagination] = useState({ page: 1, totalPages: 1 });
+  const [downloadExpenseLoading, setDownloadExpenseLoading] = useState(false);
   const [sortConfig, setSortConfig] = useState({ field: "log_date", direction: "desc" });
   const [page, setPage] = useState(1);
   const [mobileDetail, setMobileDetail] = useState(null);
@@ -144,6 +147,10 @@ export default function SalesLogPage() {
     setPage(1);
   }, [dateFilter, customerNameInput, productFilter, brandFilter, weightClassFilter]);
 
+  useEffect(() => {
+    setExpensePage(1);
+  }, [expenseFilter, expenseStartDate, expenseEndDate]);
+
   const handleSort = (field) => {
     setSortConfig((prev) =>
       prev.field === field
@@ -181,17 +188,54 @@ export default function SalesLogPage() {
 
   const loadExpenses = useCallback(async () => {
     try {
-      const expenseParams = { limit: "100", quickFilter: expenseFilter };
+      const expenseParams = {
+        limit: String(pageSize),
+        page: String(expensePage),
+        quickFilter: expenseFilter,
+      };
       if (expenseFilter === "custom") {
         if (expenseStartDate) expenseParams.startDate = expenseStartDate;
         if (expenseEndDate) expenseParams.endDate = expenseEndDate;
       }
       const expensesRes = await api.getExpenses(expenseParams);
       setExpenses(expensesRes.data || []);
+      setExpensePagination(expensesRes.pagination || { page: expensePage, totalPages: 1 });
     } catch (err) {
       showToast("Expenses Load Failed", err.message, "error");
     }
-  }, [expenseEndDate, expenseFilter, expenseStartDate, showToast]);
+  }, [expenseEndDate, expenseFilter, expensePage, expenseStartDate, showToast]);
+
+  const handleDownloadExpenses = async () => {
+    try {
+      setDownloadExpenseLoading(true);
+      if (expenseFilter === "custom" && (!expenseStartDate || !expenseEndDate)) {
+        showToast("Date Range Required", "Select both start and end dates.", "error");
+        return;
+      }
+
+      const params = {
+        period: expenseFilter,
+        format: "pdf",
+      };
+      if (expenseFilter === "custom") {
+        params.startDate = expenseStartDate;
+        params.endDate = expenseEndDate;
+      }
+
+      const { blob, filename } = await api.downloadExpenseLog(params);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      link.click();
+      URL.revokeObjectURL(url);
+      showToast("Report Ready", "Expenses downloaded successfully.");
+    } catch (err) {
+      showToast("Download Failed", err.message, "error");
+    } finally {
+      setDownloadExpenseLoading(false);
+    }
+  };
 
   useEffect(() => {
     loadData();
@@ -924,6 +968,16 @@ export default function SalesLogPage() {
                 />
               </div>
             )}
+            {isAdministrator && (
+              <button
+                type="button"
+                disabled={downloadExpenseLoading}
+                onClick={handleDownloadExpenses}
+                className="bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs px-4 py-2.5 rounded-xl disabled:opacity-60"
+              >
+                {downloadExpenseLoading ? 'Downloading...' : 'Download Expenses'}
+              </button>
+            )}
           </div>
         </div>
         {isMobile ? (
@@ -973,61 +1027,86 @@ export default function SalesLogPage() {
             )}
           </div>
         ) : (
-          <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
-            <table className="w-full min-w-[480px] text-left text-xs whitespace-nowrap">
-              <thead className="bg-red-500 text-slate-100 font-bold uppercase tracking-wide">
-                <tr>
-                  <th className="p-3 text-center">Expense</th>
-                  <th className="p-3 text-center">Amount</th>
-                  <th className="p-3 text-center">Date</th>
-                  {isAdministrator && <th className="p-3 text-center">Actions</th>}
-                </tr>
-              </thead>
-              <tbody className="font-medium text-slate-600">
-                {expenses.map((item) => (
-                  <tr
-                    key={item.expenses_id}
-                    className="odd:bg-white even:bg-slate-50/70 hover:bg-slate-100/80 transition-colors"
-                  >
-                    <td className="p-3 font-bold text-slate-800 text-center">
-                      {item.expenses}
-                    </td>
-                    <td className="p-3 text-red-600 font-bold text-center">
-                      {formatCurrency(item.amount)}
-                    </td>
-                    <td className="p-3 text-center">
-                      {formatDateLocale(item.date)}
-                    </td>
-                    {isAdministrator && (
-                      <td className="p-3 text-center space-x-1">
-                        <button
-                          type="button"
-                          onClick={() => openExpenseEditor(item)}
-                          className="text-xs font-bold bg-amber-100 hover:bg-amber-500 hover:text-white px-2.5 py-1 rounded-lg"
-                        >
-                          Edit
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setExpenseDeleteTarget(item)}
-                          className="text-xs font-bold bg-red-50 text-red-600 hover:bg-red-600 hover:text-white px-2.5 py-1 rounded-lg"
-                        >
-                          Delete
-                        </button>
-                      </td>
-                    )}
-                  </tr>
-                ))}
-                {expenses.length === 0 && (
+          <>
+            <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
+              <table className="w-full min-w-[480px] text-left text-xs whitespace-nowrap">
+                <thead className="bg-red-500 text-slate-100 font-bold uppercase tracking-wide">
                   <tr>
-                    <td colSpan={3} className="text-center py-4 text-slate-400">
-                      No expenses recorded for the selected period.
-                    </td>
+                    <th className="p-3 text-center">Expense</th>
+                    <th className="p-3 text-center">Amount</th>
+                    <th className="p-3 text-center">Date</th>
+                    {isAdministrator && <th className="p-3 text-center">Actions</th>}
                   </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody className="font-medium text-slate-600">
+                  {expenses.map((item) => (
+                    <tr
+                      key={item.expenses_id}
+                      className="odd:bg-white even:bg-slate-50/70 hover:bg-slate-100/80 transition-colors"
+                    >
+                      <td className="p-3 font-bold text-slate-800 text-center">
+                        {item.expenses}
+                      </td>
+                      <td className="p-3 text-red-600 font-bold text-center">
+                        {formatCurrency(item.amount)}
+                      </td>
+                      <td className="p-3 text-center">
+                        {formatDateLocale(item.date)}
+                      </td>
+                      {isAdministrator && (
+                        <td className="p-3 text-center space-x-1">
+                          <button
+                            type="button"
+                            onClick={() => openExpenseEditor(item)}
+                            className="text-xs font-bold bg-amber-100 hover:bg-amber-500 hover:text-white px-2.5 py-1 rounded-lg"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setExpenseDeleteTarget(item)}
+                            className="text-xs font-bold bg-red-50 text-red-600 hover:bg-red-600 hover:text-white px-2.5 py-1 rounded-lg"
+                          >
+                            Delete
+                          </button>
+                        </td>
+                      )}
+                    </tr>
+                  ))}
+                  {expenses.length === 0 && (
+                    <tr>
+                      <td colSpan={isAdministrator ? 4 : 3} className="text-center py-4 text-slate-400">
+                        No expenses recorded for the selected period.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+            {expensePagination.totalPages > 1 && (
+              <div className="flex items-center justify-between gap-3 px-4 py-3 bg-slate-50 border-t border-slate-200 text-xs text-slate-600">
+                <button
+                  type="button"
+                  onClick={() => setExpensePage((prev) => Math.max(prev - 1, 1))}
+                  disabled={expensePagination.page <= 1}
+                  className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Previous
+                </button>
+                <div>
+                  Page {expensePagination.page} of {expensePagination.totalPages}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setExpensePage((prev) => Math.min(prev + 1, expensePagination.totalPages))}
+                  disabled={expensePagination.page >= expensePagination.totalPages}
+                  className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Next
+                </button>
+              </div>
+            )}
+          </>
         )}
       </section>
     </div>

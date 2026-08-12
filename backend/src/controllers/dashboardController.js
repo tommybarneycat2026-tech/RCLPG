@@ -3,6 +3,7 @@ import * as salesService from "../services/salesService.js";
 import * as productService from "../services/productService.js";
 import * as reportService from "../services/reportService.js";
 import * as creditService from "../services/creditService.js";
+import * as expenseService from "../services/expenseService.js";
 import { asyncHandler } from "../middleware/errorHandler.js";
 import { toManilaDateISO } from "../utils/timezone.js";
 
@@ -221,6 +222,29 @@ export const downloadCreditLog = [
 
     const buffer = await reportService.buildCreditLogPdfBuffer(filtered, 'RCLPG Credit Log Report', summary, req.user?.name);
     const filenameBase = `RCLPG_Credit_Log_${Date.now()}`;
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${filenameBase}.pdf"`);
+    return res.send(buffer);
+  }),
+];
+
+export const downloadExpenseLog = [
+  q('period')
+    .isIn(['today', 'daily', 'weekly', 'monthly', 'first_half', 'second_half', 'year', 'yearly', 'custom'])
+    .withMessage('Invalid period'),
+  q('startDate').optional().isISO8601(),
+  q('endDate').optional().isISO8601(),
+  asyncHandler(async (req, res) => {
+    const { period, startDate, endDate } = req.query;
+
+    if (period === 'custom' && (!startDate || !endDate)) {
+      return res.status(400).json({ success: false, message: 'Start and end dates are required for custom range' });
+    }
+
+    const rows = await expenseService.getExpensesForExport(period, startDate, endDate);
+    const buffer = await reportService.buildExpenseLogPdfBuffer(rows, 'RCLPG Expense Log', req.user?.name);
+    const filenameBase = `RCLPG_Expense_Log_${Date.now()}`;
+
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="${filenameBase}.pdf"`);
     return res.send(buffer);

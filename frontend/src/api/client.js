@@ -225,6 +225,15 @@ export const api = {
     const filename = match?.[1] || `RCLPG_Credit_Log_${Date.now()}.pdf`;
     return { blob, filename };
   },
+  downloadExpenseLog: async (params) => {
+    const qs = new URLSearchParams(params).toString();
+    const response = await request(`/dashboard/download-expense-log?${qs}`);
+    const blob = await response.blob();
+    const disposition = response.headers.get("Content-Disposition") || "";
+    const match = disposition.match(/filename="(.+)"/);
+    const filename = match?.[1] || `RCLPG_Expense_Log_${Date.now()}.pdf`;
+    return { blob, filename };
+  },
 };
 
 export function saveSession({ token, expiresAt, admin }) {
