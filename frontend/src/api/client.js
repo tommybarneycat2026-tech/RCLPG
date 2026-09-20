@@ -1,5 +1,7 @@
 const API_URL = import.meta.env.VITE_API_URL || "/api";
 
+const DEFAULT_TIMEOUT_MS = 60000; // long enough for report/PDF downloads
+
 function getToken() {
   return localStorage.getItem("rclpg_token");
 }
@@ -16,29 +18,17 @@ export function clearSession() {
   localStorage.removeItem("rclpg_admin");
 }
 
+class ApiError extends Error {
+  constructor(message, { status, code } = {}) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+    this.code = code; // "TIMEOUT" | "NETWORK" | "HTTP"
+  }
+}
+
 function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-function isRetryableNetworkError(error) {
-  const message = String(error?.message || '');
-  return (
-    error instanceof TypeError ||
-    /Failed to fetch|NetworkError|ERR_CONNECTION_CLOSED|ECONNRESET|ECONNREFUSED/i.test(message)
-  );
-}
-
-async function requestWithRetry(path, options = {}, retries = 1, delayMs = 3000) {
-  for (let attempt = 1; attempt <= retries; attempt += 1) {
-    try {
-      return await request(path, options);
-    } catch (error) {
-      if (attempt === retries || !isRetryableNetworkError(error)) {
-        throw error;
-      }
-      await delay(delayMs);
-    }
-  }
 }
 
 export function isSessionExpired() {
@@ -47,7 +37,31 @@ export function isSessionExpired() {
   return new Date() >= new Date(expiry);
 }
 
-async function request(path, options = {}) {
+async function fetchWithTimeout(url, options, timeoutMs) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } catch (err) {
+    if (err.name === "AbortError") {
+      throw new ApiError("The connection is too slow. Please try again.", {
+        code: "TIMEOUT",
+      });
+    }
+    throw new ApiError(
+      "Can't reach the server. Check your internet connection.",
+      { code: "NETWORK" },
+    );
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function request(
+  path,
+  options = {},
+  { timeoutMs = DEFAULT_TIMEOUT_MS } = {},
+) {
   const headers = {
     "Content-Type": "application/json",
     ...(options.headers || {}),
@@ -58,10 +72,11 @@ async function request(path, options = {}) {
     headers.Authorization = `Bearer ${token}`;
   }
 
-  const response = await fetch(`${API_URL}${path}`, {
-    ...options,
-    headers,
-  });
+  const response = await fetchWithTimeout(
+    `${API_URL}${path}`,
+    { ...options, headers },
+    timeoutMs,
+  );
 
   if (response.status === 401) {
     clearSession();
@@ -74,12 +89,49 @@ async function request(path, options = {}) {
   if (contentType.includes("application/json")) {
     const data = await response.json();
     if (!response.ok) {
-      throw new Error(data.message || "Request failed");
+      throw new ApiError(data.message || "Request failed", {
+        status: response.status,
+        code: "HTTP",
+      });
     }
     return data;
   }
 
-  return response;
+  // Non-JSON error (e.g. HTML 502/504 from a proxy) must not look like success
+  if (!response.ok) {
+    throw new ApiError(`Server error (${response.status}). Please try again.`, {
+      status: response.status,
+      code: "HTTP",
+    });
+  }
+
+  return response; // blobs/downloads
+}
+
+function isRetryable(err) {
+  return (
+    err.code === "TIMEOUT" ||
+    err.code === "NETWORK" ||
+    [502, 503, 504].includes(err.status)
+  );
+}
+
+async function requestWithRetry(
+  path,
+  options = {},
+  { attempts = 3, delayMs = 1500, timeoutMs } = {},
+) {
+  let lastError;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      return await request(path, options, { timeoutMs });
+    } catch (err) {
+      lastError = err;
+      if (attempt === attempts || !isRetryable(err)) throw err;
+      await delay(delayMs * attempt); // 1.5s, 3s, ...
+    }
+  }
+  throw lastError;
 }
 
 export const api = {
@@ -90,8 +142,7 @@ export const api = {
         method: "POST",
         body: JSON.stringify({ username, password }),
       },
-      6,
-      5000,
+      { attempts: 3, delayMs: 1500, timeoutMs: 15000 },
     ),
   register: (name, username, email, password, phoneNumber) =>
     request("/auth/register", {
