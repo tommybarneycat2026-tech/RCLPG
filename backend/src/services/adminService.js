@@ -73,7 +73,7 @@ export async function updateOwnProfile(adminId, role, fields) {
     if (fields.username !== undefined) {
       const normalized = normalizeUsername(fields.username);
       const existing = await query(
-        `SELECT admin_id FROM admins WHERE LOWER(username) = $1 AND admin_id <> $2 LIMIT 1`,
+        `SELECT admin_id FROM admins WHERE username = $1 AND admin_id <> $2 LIMIT 1`,
         [normalized, adminId]
       );
       if (existing.rows[0]) {
@@ -146,7 +146,7 @@ export async function updateAdminById(adminId, fields) {
   if (fields.username !== undefined) {
     const normalized = normalizeUsername(fields.username);
     const existing = await query(
-      `SELECT admin_id FROM admins WHERE LOWER(username) = $1 AND admin_id <> $2 LIMIT 1`,
+      `SELECT admin_id FROM admins WHERE username = $1 AND admin_id <> $2 LIMIT 1`,
       [normalized, adminId]
     );
     if (existing.rows[0]) {
@@ -254,7 +254,7 @@ export async function createAdmin(fields) {
   }
 
   // uniqueness checks
-  const existingUser = await query(`SELECT admin_id FROM admins WHERE LOWER(username) = $1 LIMIT 1`, [username]);
+  const existingUser = await query(`SELECT admin_id FROM admins WHERE username = $1 LIMIT 1`, [username]);
   if (existingUser.rows[0]) {
     throw new AppError('This username is already taken', 409);
   }

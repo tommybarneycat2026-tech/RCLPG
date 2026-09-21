@@ -13,7 +13,7 @@ export async function findAdminByUsername(username) {
   const normalized = normalizeUsername(username);
   const result = await query(
     `SELECT ${ADMIN_AUTH_SELECT}
-     FROM admins WHERE LOWER(username) = $1 LIMIT 1`,
+     FROM admins WHERE username = $1 LIMIT 1`,
     [normalized]
   );
   return result.rows[0] || null;
