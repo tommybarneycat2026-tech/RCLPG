@@ -1,8 +1,9 @@
 {
   "rewrites": [
     {
-      "source": "/(.*)",
-      "destination": "/index.html"
-    }
+      "source": "/api/:path*",
+      "destination": "https://rclpg.onrender.com/api/:path*"
+    },
+    { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
